@@ -398,7 +398,7 @@ namespace LineOfSight
         public override void AddToContainer(RoomCamera.SpriteLeaser sLeaser, RoomCamera rCam, FContainer newContainer)
         {
             if (newContainer == null)
-                newContainer = rCam.ReturnFContainer("ForegroundLights");
+                newContainer = rCam.ReturnFContainer("Bloom");
             for (int i = 0; i < sLeaser.sprites.Length; i++)
                 newContainer.AddChild(sLeaser.sprites[i]);
         }
