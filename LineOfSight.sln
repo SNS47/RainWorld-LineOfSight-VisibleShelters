@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.7.34024.191
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LineOfSight", "LineOfSight\LineOfSight.csproj", "{B858BBC9-EB4E-4E63-9277-A036E5822C13}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B858BBC9-EB4E-4E63-9277-A036E5822C13}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B858BBC9-EB4E-4E63-9277-A036E5822C13}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B858BBC9-EB4E-4E63-9277-A036E5822C13}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B858BBC9-EB4E-4E63-9277-A036E5822C13}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {85D1BB8E-2BE7-4DBC-B438-AF835E770575}
+	EndGlobalSection
+EndGlobal
