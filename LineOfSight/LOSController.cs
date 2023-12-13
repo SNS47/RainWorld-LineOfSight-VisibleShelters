@@ -10,10 +10,10 @@ namespace LineOfSight
     {
         internal static bool hackToDelayDrawingUntilAfterTheLevelMoves;
 
-        private static Matrix ROTATE_0 = new Matrix(1f, 0f, 0f, 1f);
-        private static Matrix ROTATE_90 = new Matrix(0f, 1f, -1f, 0f);
-        private static Matrix ROTATE_180 = new Matrix(-1f, 0f, 0f, -1f);
-        private static Matrix ROTATE_270 = new Matrix(0f, -1f, 1f, 0f);
+        private TriangleMesh fovBlocker;
+        private FSprite screenBlocker;
+        //private TriangleMesh fovColorer;
+        private TriangleMesh shortcutPeek;
 
         private int _x;
         private int _y;
@@ -51,7 +51,7 @@ namespace LineOfSight
             tileSize = config.tileSize.Value;
             brightness = config.brightness.Value / 100f;
             visibility = config.visibility.Value / 100f;
-
+            
             _x = 0;
             _y = 0;
 
@@ -59,7 +59,6 @@ namespace LineOfSight
             {
                 _fovShader = FShader.CreateShader("LOSShader", Assets.LOSShader);
             }
-
             _shader = LineOfSightMod.classic ? room.game.rainWorld.Shaders["Basic"] : _fovShader;
 
             // Create a copy of the room's tiles
@@ -236,7 +235,7 @@ namespace LineOfSight
             {
                 // Search for the closest shortcut entrance and display a sprite at the end location
                 // Disabled in classic mode
-                if (!LineOfSightMod.classic)
+                /*if (!LineOfSightMod.classic)
                 {
                     IntVector2 scPos = new IntVector2();
                     bool found = false;
@@ -294,7 +293,7 @@ namespace LineOfSight
 
                     _lastPeekAlpha = _peekAlpha;
                     _peekAlpha = Custom.LerpAndTick(_peekAlpha, found ? Mathf.Sin(room.game.clock / 40f * Mathf.PI * 4f) * 0.25f + 0.75f : 0f, 0.1f, 0.075f);
-                }
+                }*/
 
                 // Allow vision when going through shortcuts
                 if (plyVessel != null)
@@ -305,7 +304,7 @@ namespace LineOfSight
                     _overrideEyePos = Vector2.Lerp(plyVessel.lastPos.ToVector2(), plyVessel.pos.ToVector2(), (updateShortCut + 1) / 3f) * 20f + new Vector2(10f, 10f);
                     if (first) _lastOverrideEyePos = _overrideEyePos.Value;
                     if (plyVessel.room.realizedRoom != null)
-                        screenblockAlpha = plyVessel.room.realizedRoom.GetTile(_overrideEyePos.Value).Solid ? 1f : 0f;
+                        screenblockAlpha = plyVessel.room.realizedRoom.GetTile(_overrideEyePos.Value).Solid ? 1f : Mathf.Clamp01(screenblockAlpha - 0.2f);
                 }
                 else
                     _overrideEyePos = null;
@@ -343,20 +342,27 @@ namespace LineOfSight
             }
 
             // Block outside of FoV with level color
-            TriangleMesh colorBlocker = new TriangleMesh("Futile_White", tris, false, true);
-            colorBlocker.shader = _shader;
-            sLeaser.sprites[0] = colorBlocker;
-            corners.CopyTo(colorBlocker.vertices);
-            colorBlocker.Refresh();
+            fovBlocker = new TriangleMesh("Futile_White", tris, false, true);
+            fovBlocker.shader = _shader;
+            corners.CopyTo(fovBlocker.vertices);
+            fovBlocker.Refresh();
+            sLeaser.sprites[0] = fovBlocker;
+
+            /*fovColorer = new TriangleMesh("Futile_White", tris, false, true);
+            fovColorer.shader = room.game.rainWorld.Shaders["Basic"];
+            corners.CopyTo(fovColorer.vertices);
+            fovColorer.Refresh();
+            sLeaser.sprites[3] = fovColorer;*/
 
             // Full screen overlay
-            sLeaser.sprites[1] = new FSprite("pixel")
+
+            screenBlocker = new FSprite("pixel")
             {
                 anchorX = 0f,
                 anchorY = 0f
             };
-            sLeaser.sprites[1].shader = _shader;
-
+            screenBlocker.shader = _shader;
+            sLeaser.sprites[1] = screenBlocker;
             // Shortcut peek
             tris = new TriangleMesh.Triangle[]
             {
@@ -366,41 +372,52 @@ namespace LineOfSight
                 new TriangleMesh.Triangle(2, 3, 4), new TriangleMesh.Triangle(3, 4, 5),
                 new TriangleMesh.Triangle(4, 5, 6), new TriangleMesh.Triangle(5, 6, 7)
             };
-            TriangleMesh scPeek = new TriangleMesh("Futile_White", tris, true, true);
-            scPeek.vertices[0].Set(-10f, -10f);
-            scPeek.vertices[1].Set(-10f, 10f);
-            scPeek.vertices[2].Set(10f, -10f);
-            scPeek.vertices[3].Set(10f, 10f);
-            scPeek.vertices[4].Set(30f, -30f);
-            scPeek.vertices[5].Set(30f, 30f);
-            scPeek.vertices[6].Set(60f, -60f);
-            scPeek.vertices[7].Set(60f, 60f);
-            sLeaser.sprites[2] = scPeek;
+            shortcutPeek = new TriangleMesh("Futile_White", tris, true, true);
+            shortcutPeek.vertices[0].Set(-10f, -10f);
+            shortcutPeek.vertices[1].Set(-10f, 10f);
+            shortcutPeek.vertices[2].Set(10f, -10f);
+            shortcutPeek.vertices[3].Set(10f, 10f);
+            shortcutPeek.vertices[4].Set(30f, -30f);
+            shortcutPeek.vertices[5].Set(30f, 30f);
+            shortcutPeek.vertices[6].Set(60f, -60f);
+            shortcutPeek.vertices[7].Set(60f, 60f);
+            sLeaser.sprites[2] = shortcutPeek;
 
             AddToContainer(sLeaser, rCam, null);
         }
 
         public override void ApplyPalette(RoomCamera.SpriteLeaser sLeaser, RoomCamera rCam, RoomPalette palette)
         {
-            /*if (LineOfSightMod.classic)
-            {
-                sLeaser.sprites[0].color = palette.blackColor;
-                sLeaser.sprites[1].color = palette.blackColor;
-            }*/
-            Color unseenColor = Color.Lerp(Color.black, palette.blackColor, brightness);
-            unseenColor.a = 1 - visibility;
+            Color unseenColor;
+            if (LineOfSightMod.classic)
+                unseenColor = Color.Lerp(Color.black, palette.blackColor, brightness);
+            else
+                unseenColor = new Color(1f - visibility, 0, 0, 1f);
 
-            sLeaser.sprites[0].color = unseenColor;
-            sLeaser.sprites[1].color = unseenColor;
-            sLeaser.sprites[2].color = new Color(1f, 1f, 1f);
+            fovBlocker.color = unseenColor;
+            screenBlocker.color = unseenColor;
+            //fovColorer.color = unseenColor;
+            shortcutPeek.color = new Color(1f, 1f, 1f);
         }
 
         public override void AddToContainer(RoomCamera.SpriteLeaser sLeaser, RoomCamera rCam, FContainer newContainer)
         {
-            if (newContainer == null)
-                newContainer = rCam.ReturnFContainer("Bloom");
-            for (int i = 0; i < sLeaser.sprites.Length; i++)
-                newContainer.AddChild(sLeaser.sprites[i]);
+            FContainer FLightsContainer = rCam.ReturnFContainer("ForegroundLights");
+            FContainer BloomContainer = rCam.ReturnFContainer("Bloom");
+
+            if(LineOfSightMod.classic)
+            {
+                BloomContainer.AddChild(fovBlocker);
+                BloomContainer.AddChild(screenBlocker);
+                BloomContainer.AddChild(shortcutPeek);
+            } 
+            else
+            {
+                FLightsContainer.AddChild(fovBlocker);
+                FLightsContainer.AddChild(screenBlocker);
+                FLightsContainer.AddChild(shortcutPeek);
+            }
+            //BloomContainer.AddChild(fovColorer);
         }
 
         private Vector2 _lastEyePos;
@@ -434,8 +451,6 @@ namespace LineOfSight
                 _eyePos = Vector2.Lerp(_lastOverrideEyePos, _overrideEyePos.Value, timeStacker);
 
             // Update FOV blocker mesh
-            TriangleMesh fovBlocker = (TriangleMesh)sLeaser.sprites[0];
-
             if (_eyePos != _lastEyePos)
             {
                 Vector2 pos;
@@ -462,6 +477,12 @@ namespace LineOfSight
             fovBlocker.x = -_lastCamPos.x;
             fovBlocker.y = -_lastCamPos.y;
 
+            /*fovColorer.vertices = fovBlocker.vertices;
+            fovColorer.UVvertices = fovBlocker.UVvertices;
+            fovColorer.Refresh();
+            fovColorer.x = -_lastCamPos.x;
+            fovColorer.y = -_lastCamPos.y;*/
+
             if (!LineOfSightMod.classic && fovBlocker.element != rCam.levelGraphic.element)
                 fovBlocker.element = rCam.levelGraphic.element;
 
@@ -483,24 +504,25 @@ namespace LineOfSight
             float alpha = Mathf.Lerp(lastScreenblockAlpha, screenblockAlpha, timeStacker);
             if (alpha == 0f)
             {
-                sLeaser.sprites[1].isVisible = false;
+                screenBlocker.isVisible = false;
+                //fovColorer.alpha = 1f;
             }
             else
             {
-                FSprite screenBlock = sLeaser.sprites[1];
-                screenBlock.scaleX = rCam.levelGraphic.scaleX;
-                screenBlock.scaleY = rCam.levelGraphic.scaleY;
-                screenBlock.x = rCam.levelGraphic.x;
-                screenBlock.y = rCam.levelGraphic.y;
+                screenBlocker.scaleX = rCam.levelGraphic.scaleX;
+                screenBlocker.scaleY = rCam.levelGraphic.scaleY;
+                screenBlocker.x = rCam.levelGraphic.x;
+                screenBlocker.y = rCam.levelGraphic.y;
                 if (LineOfSightMod.classic)
                 {
                     // Must be resized to fit the level image
-                    screenBlock.width = rCam.levelGraphic.width;
-                    screenBlock.height = rCam.levelGraphic.height;
+                    screenBlocker.width = rCam.levelGraphic.width;
+                    screenBlocker.height = rCam.levelGraphic.height;
                 }
-                else if (screenBlock.element != rCam.levelGraphic.element)
-                    screenBlock.element = rCam.levelGraphic.element;
-                screenBlock.alpha = alpha;
+                else if (screenBlocker.element != rCam.levelGraphic.element)
+                    screenBlocker.element = rCam.levelGraphic.element;
+                screenBlocker.alpha = alpha;
+                //fovColorer.alpha = 1f - alpha;
             }
 
             if (!LineOfSightMod.classic)
@@ -509,12 +531,11 @@ namespace LineOfSight
                 float peekAlpha = Mathf.Lerp(_lastPeekAlpha, _peekAlpha, timeStacker);
                 if (peekAlpha > 0f)
                 {
-                    TriangleMesh peek = (TriangleMesh)sLeaser.sprites[2];
                     //if (peek.element != rCam.levelGraphic.element)
                     //    peek.element = rCam.levelGraphic.element;
                     if (_lastPeekAlpha != _peekAlpha)
                     {
-                        Color[] cols = peek.verticeColors;
+                        Color[] cols = shortcutPeek.verticeColors;
                         for (int i = 0; i < cols.Length; i++)
                         {
                             float vertAlpha = (i < 6) ? peekAlpha : 0f;
@@ -535,30 +556,38 @@ namespace LineOfSight
                     //    peek.UVvertices[i].y = InverseLerpUnclamped(bounds.yMin, bounds.yMax, wPos.y);
                     //}
 
-                    peek.SetPosition(_peekPos - _lastCamPos);
-                    peek.rotation = _peekAngle;
+                    shortcutPeek.SetPosition(_peekPos - _lastCamPos);
+                    shortcutPeek.rotation = _peekAngle;
                 }
                 else
-                    sLeaser.sprites[2].isVisible = false;
+                    shortcutPeek.isVisible = false;
             }
             else
-                sLeaser.sprites[2].isVisible = false;
+                shortcutPeek.isVisible = false;
 
             // Keep on top
-            FContainer container = sLeaser.sprites[2].container;
-            if (container.GetChildAt(container.GetChildCount() - 1) != sLeaser.sprites[2])
+            if (shortcutPeek.container.GetChildAt(shortcutPeek.container.GetChildCount() - 1) != shortcutPeek)
             {
-                for (int i = 0; i < sLeaser.sprites.Length; i++)
-                    sLeaser.sprites[i].MoveToFront();
+                fovBlocker.MoveToFront();
+                screenBlocker.MoveToFront();
+                shortcutPeek.MoveToFront();
             }
-            base.DrawSprites(sLeaser, rCam, timeStacker, _lastCamPos);
+            /*if (fovColorer.container.GetChildAt(fovColorer.container.GetChildCount() - 1) != fovColorer)
+                fovColorer.MoveToFront();
 
+            fovColorer.isVisible = false;*/
+            base.DrawSprites(sLeaser, rCam, timeStacker, _lastCamPos);
         }
 
         private float InverseLerpUnclamped(float from, float to, float t)
         {
             return (t - from) / (to - from);
         }
+
+        private static Matrix ROTATE_0 = new Matrix(1f, 0f, 0f, 1f);
+        private static Matrix ROTATE_90 = new Matrix(0f, 1f, -1f, 0f);
+        private static Matrix ROTATE_180 = new Matrix(-1f, 0f, 0f, -1f);
+        private static Matrix ROTATE_270 = new Matrix(0f, -1f, 1f, 0f);
 
         public void UpdateMapper(int iterations)
         {

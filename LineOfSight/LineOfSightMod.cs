@@ -15,7 +15,6 @@ namespace LineOfSight
 		private bool initialized = false;
 
 		public static bool classic = false;
-		public static bool SBCameraScroll;
 
 		// FOR MULTIPLE PLAYERS:
 		// Same mesh generation process repeated for all players
@@ -36,13 +35,6 @@ namespace LineOfSight
 		private void OnModInit(On.RainWorld.orig_OnModsInit orig, RainWorld self)
 		{
 			orig(self);
-
-			SBCameraScroll = false;
-			foreach (ModManager.Mod mod in ModManager.ActiveMods)
-            {
-				if (mod.id == "SchuhBaum.SBCameraScroll")
-					SBCameraScroll = true;
-			}
 
 			// initialize options menu
 			if (this.initialized)
@@ -88,6 +80,7 @@ namespace LineOfSight
 
 		private void Room_Loaded(On.Room.orig_Loaded orig, Room self)
 		{
+			classic = optionsMenuInstance.classic.Value;
 			if (self.game != null)
 			{
 				LOSController owner;
