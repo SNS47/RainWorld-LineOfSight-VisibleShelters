@@ -1,6 +1,7 @@
 ﻿using Menu.Remix.MixedUI;
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -21,6 +22,9 @@ namespace LineOfSight
             visibility = this.config.Bind<int>("LineOfSight_Visibility", 100);
             brightness = this.config.Bind<int>("LineOfSight_Brightness", 65);
             tileSize = this.config.Bind<int>("LineOfSight_TileSize", 8);
+
+            On.OptionInterface._LoadConfigFile += OnLoad;
+            On.OptionInterface._SaveConfigFile += OnSave;
         }
 
         public override void Initialize()
@@ -44,6 +48,31 @@ namespace LineOfSight
                 new OpLabel(265, 306, "Tile Size")
             };
             opTab1.AddItems(UIArrayElements);
+        }
+
+        private void OnLoad(On.OptionInterface.orig__LoadConfigFile orig, OptionInterface self)
+        {
+            orig(self);
+            if (self == this)
+                UpdateConfigs();
+        }
+
+        private void OnSave(On.OptionInterface.orig__SaveConfigFile orig, OptionInterface self)
+        {
+            orig(self);
+            if (self == this)
+                UpdateConfigs();
+        }
+
+        //I don't like how long it is to type Options.tileSize.Value.
+        //called only when configs are loaded or changed.
+        public void UpdateConfigs()
+        {
+            LOSController.classic = classic.Value;
+            LOSController.visibility = visibility.Value / 100f;
+            LOSController.brightness = brightness.Value / 100f;
+            LOSController.tileSize = tileSize.Value;
+            LOSController.fovShader = null;
         }
     }
 }

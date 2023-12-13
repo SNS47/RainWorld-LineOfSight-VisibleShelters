@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace LineOfSight
 {
-    [BepInPlugin("LineOfSight", "Line Of Sight", "1.2.0")] // (GUID, mod name, mod version)
+    [BepInPlugin("LineOfSight", "Line Of Sight", "1.3.0")] // (GUID, mod name, mod version)
 	public class LineOfSightMod : BaseUnityPlugin
 	{
 		private OptionsMenu optionsMenuInstance;
@@ -30,7 +30,7 @@ namespace LineOfSight
             On.RoomCamera.DrawUpdate += RoomCamera_DrawUpdate;
 			On.Room.Loaded += Room_Loaded;
 			On.RainWorld.OnModsInit += OnModInit;
-		}
+        }
 
 		private void OnModInit(On.RainWorld.orig_OnModsInit orig, RainWorld self)
 		{
@@ -56,14 +56,12 @@ namespace LineOfSight
 			}
 		}
 
-		private FieldInfo _RoomCamera_spriteLeasers = typeof(RoomCamera).GetField("spriteLeasers", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-
 		private void RoomCamera_DrawUpdate(On.RoomCamera.orig_DrawUpdate orig, RoomCamera self, float timeStacker, float timeSpeed)
 		{
 			
 			orig(self, timeStacker, timeSpeed);
-			List<RoomCamera.SpriteLeaser> list = (List<RoomCamera.SpriteLeaser>)this._RoomCamera_spriteLeasers.GetValue(self);
-			LOSController.hackToDelayDrawingUntilAfterTheLevelMoves = true;
+			List<RoomCamera.SpriteLeaser> list = list = self.spriteLeasers;
+            LOSController.hackToDelayDrawingUntilAfterTheLevelMoves = true;
 			for (int i = 0; i < list.Count; i++)
 			{
 				if (list[i].drawableObject is LOSController)
@@ -84,7 +82,7 @@ namespace LineOfSight
 			if (self.game != null)
 			{
 				LOSController owner;
-				self.AddObject(owner = new LOSController(self, optionsMenuInstance));
+				self.AddObject(owner = new LOSController(self));
 				self.AddObject(new ShortcutDisplay(owner));
 			}
 			orig(self);
