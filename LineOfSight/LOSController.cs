@@ -323,9 +323,13 @@ namespace LineOfSight
         private enum Direction
         {
             Up,
+            UpRight,
             Right,
+            DownRight,
             Down,
-            Left
+            DownLeft,
+            Left,
+            UpLeft
         }
 
         public void UpdateMapper(int iterations)
@@ -352,10 +356,10 @@ namespace LineOfSight
                                 }
                                 else if (tileSize < 10f) //new edge detection
                                 {
-                                    CalculateEdge(new Vector2Int(_x, _y), ROTATE_0);
-                                    CalculateEdge(new Vector2Int(_x, _y), ROTATE_90);
-                                    CalculateEdge(new Vector2Int(_x, _y), ROTATE_180);
-                                    CalculateEdge(new Vector2Int(_x, _y), ROTATE_270);
+                                    CalculateEdge(new Vector2Int(_x, _y), 0, ROTATE_0);
+                                    CalculateEdge(new Vector2Int(_x, _y), 1, ROTATE_90);
+                                    CalculateEdge(new Vector2Int(_x, _y), 2, ROTATE_180);
+                                    CalculateEdge(new Vector2Int(_x, _y), 3, ROTATE_270);
                                 }
                             }
                             _x++;
@@ -481,7 +485,7 @@ namespace LineOfSight
             edges.Add(item2);
         }
 
-        public void CalculateEdge(Vector2Int tile, Matrix rotationMatrix)
+        private void CalculateEdge(Vector2Int tile, int phase, Matrix rotationMatrix)
         {
             // get the necessary tiles for the calculation
             Vector2Int leftTile = tile + rotationMatrix.Transform(new Vector2Int(-1, 0));
@@ -493,37 +497,37 @@ namespace LineOfSight
             Vector2 mid = room.MiddleOfTile(tile.x, tile.y);
             List<Vector2> vertices = new List<Vector2>();
             
-            if (IsSolid(leftTile) && !IsSolid(topLeftTile) && IsSolid(topTile)) // L shaped
+            if (IsSolid(leftTile, Direction.Right, phase) && IsSolid(topTile, Direction.Down, phase)) // L shaped
             {
-                if (IsSlope(leftTile) || IsSlope(topTile))
+                if (IsSlope(leftTile, Direction.UpLeft, phase) || IsSlope(topTile, Direction.UpLeft, phase))
                 {
                     vertices.Add(new Vector2(-10f, tileSize));
                     vertices.Add(new Vector2(-tileSize, 10f));
                 }
-                else
+                else if (!IsSolid(topLeftTile, Direction.DownRight, phase))
                 {
                     vertices.Add(new Vector2(-10f, tileSize));
                     vertices.Add(new Vector2(-tileSize, tileSize));
                     vertices.Add(new Vector2(-tileSize, 10f));
                 }
             }
-            else if (!IsSolid(topTile))
+            else if (!IsSolid(topTile, Direction.Down, phase))  // open top
             {
-                if (IsSolid(leftTile))
+                if (IsSolid(leftTile, Direction.Right, phase))
                     vertices.Add(new Vector2(-10f, tileSize));
                 else
                 {
-                    if (IsSolid(topLeftTile))
+                    if (IsSolid(topLeftTile, Direction.DownRight, phase)) //prevent see-through corners
                         vertices.Add(new Vector2(-10f, 10f));
                     vertices.Add(new Vector2(-tileSize, tileSize));
                 }
-                if (IsSolid(rightTile))
+                if (IsSolid(rightTile, Direction.Left, phase))
                     vertices.Add(new Vector2(10f, tileSize));
                 else
                 {
                     vertices.Add(new Vector2(tileSize, tileSize));
-                    if (IsSolid(topRightTile))
-                        vertices.Add(new Vector2(10f, 10f));
+                    //if (IsSolid(topRightTile, Direction.DownLeft, phase)) //prevent see-through corners
+                    //    vertices.Add(new Vector2(10f, 10f));
                 }
             }
 
@@ -536,22 +540,40 @@ namespace LineOfSight
             }
         }
 
-        public bool IsSolid(Vector2Int tile)
+        readonly Direction[] slopeTable = { Direction.UpLeft, Direction.UpRight, Direction.DownLeft, Direction.DownRight };
+
+        private bool IsSolid(Vector2Int tile, Direction face, int phase)
         {
             Room.Tile.TerrainType terrain = room.GetTile(tile.x, tile.y).Terrain;
 
-            if (terrain == Room.Tile.TerrainType.Solid ||
-                (terrain == Room.Tile.TerrainType.Slope &&
-                room.IdentifySlope(tile.x, tile.y) != Room.SlopeDirection.Broken)) 
+            if (terrain == Room.Tile.TerrainType.Solid)
                 return true;
+
+            if (terrain == Room.Tile.TerrainType.Slope)
+            {
+                Room.SlopeDirection slopeDir = room.IdentifySlope(tile.x, tile.y);
+                if (slopeDir == Room.SlopeDirection.Broken)
+                    return false;
+
+                //adjust face based on slope direction and phase
+                face = (Direction)(((int)face + (9 - (int)slopeTable[(int)slopeDir]) + (2 * phase)) % 8);
+                
+                //assume slope direction is UpRight
+                return face <= Direction.Left && face >= Direction.Down;
+            }
+
             return false;
         }
 
-        public bool IsSlope(Vector2Int tile)
+        private bool IsSlope(Vector2Int tile, Direction dir, int phase)
         {
-
-            return tiles[tile.x, tile.y].Terrain == Room.Tile.TerrainType.Slope &&
-                room.IdentifySlope(tile.x, tile.y) != Room.SlopeDirection.Broken;
+            Room.SlopeDirection slopeDir = room.IdentifySlope(tile.x, tile.y);
+            if (slopeDir != Room.SlopeDirection.Broken)
+            {
+                dir = (Direction)(((int)dir + (phase * 2)) % 8);
+                return dir == slopeTable[(int)slopeDir];
+            }
+            return false; 
         }
     }
 
