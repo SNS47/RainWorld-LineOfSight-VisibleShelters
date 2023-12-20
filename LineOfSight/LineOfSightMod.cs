@@ -4,6 +4,9 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Security.Permissions;
 using UnityEngine;
+using LineOfSight;
+using BepInEx.Logging;
+
 [assembly: SecurityPermission(SecurityAction.RequestMinimum, SkipVerification = true)]
 
 namespace LineOfSight
@@ -14,22 +17,47 @@ namespace LineOfSight
 		private OptionsMenu optionsMenuInstance;
 		private bool initialized = false;
 
-		public static bool classic = false;
+		public static Type[] blacklist = {
+			typeof(PhysicalObject),
+			typeof(SporeCloud),
+			typeof(SlimeMoldLight),
+			typeof(Bubble),
+			typeof(CosmeticInsect),
+			typeof(WormGrass.Worm),
+            typeof(GraphicsModule),
+            typeof(LizardBubble),
+            typeof(Spark),
+            typeof(DaddyBubble),
+            typeof(DaddyRipple),
+            typeof(DaddyCorruption),
+            typeof(MouseSpark),
+            typeof(CentipedeShell),
+        };
 
-		// FOR MULTIPLE PLAYERS:
-		// Same mesh generation process repeated for all players
-		// The shader process goes like this:
-		// 1 - Draw LOS mesh, set bit 1 of the stencil mask
-		// 2 - Draw fullscreen quad, if bit 1 is not set then set bit 0
-		// 3 - Draw fullscreen quad, unset bit 1
-		// 4 - Repeat steps 1-3 for each player
-		// 5 - Draw fullscreen quad, if bit 0 is set then draw LOS blocker
+        public static Type[] Whitelist = { 
+			typeof(LOSController),
+			typeof(PlayerGraphics), 
+			typeof(OverseerGraphics), 
+			typeof(PoleMimicGraphics) 
+		};
 
-		public void OnEnable()
+        // FOR MULTIPLE PLAYERS:
+        // Same mesh generation process repeated for all players
+        // The shader process goes like this:
+        // 1 - Draw LOS mesh, set bit 1 of the stencil mask
+        // 2 - Draw fullscreen quad, if bit 1 is not set then set bit 0
+        // 3 - Draw fullscreen quad, unset bit 1
+        // 4 - Repeat steps 1-3 for each player
+        // 5 - Draw fullscreen quad, if bit 0 is set then draw LOS blocker
+
+        public void OnEnable()
 		{
             On.RoomCamera.DrawUpdate += RoomCamera_DrawUpdate;
 			On.Room.Loaded += Room_Loaded;
 			On.RainWorld.OnModsInit += OnModInit;
+
+            LOSController.AddBlacklistedTypes(blacklist);
+			LOSController.AddWhitelistedTypes(Whitelist);
         }
 
 		private void OnModInit(On.RainWorld.orig_OnModsInit orig, RainWorld self)
@@ -78,7 +106,6 @@ namespace LineOfSight
 
 		private void Room_Loaded(On.Room.orig_Loaded orig, Room self)
 		{
-			classic = optionsMenuInstance.classic.Value;
 			if (self.game != null)
 			{
 				LOSController owner;

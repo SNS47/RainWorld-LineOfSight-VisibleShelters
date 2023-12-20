@@ -2,26 +2,40 @@
 using System.Collections.Generic;
 using UnityEngine;
 using System.Reflection;
+using System.Security.Policy;
 using System;
+using System.Collections;
+using System.Xml;
+using MoreSlugcats;
+using System.Linq;
+using System.ComponentModel;
 
 namespace LineOfSight
 {
-    class LOSController : CosmeticSprite
+    public class LOSController : CosmeticSprite
     {
         internal static bool hackToDelayDrawingUntilAfterTheLevelMoves;
 
+        //Hide sprites in high quality mode
+        public static HashSet<Type> blacklistedTypes = new HashSet<Type>();
+        public static HashSet<Type> whitelistedTypes = new HashSet<Type>();
+        public static HashSet<Type> generatedTypeBlacklist;
+
         //config variables
         public static bool classic;
+        public static bool highQuality = true;
         public static float visibility;
         public static float brightness;
         public static float tileSize;
 
         public static FShader fovShader;
+        public static RenderTexture renderTexture;
+        public static FAtlasElement renderTextureElement;
 
         //Sprites
+        private FSprite fovColorer;
         private TriangleMesh fovBlocker;
         private FSprite screenBlocker;
-        //private TriangleMesh fovColorer;
 
         //Rendering
         public float lastScreenblockAlpha = 1f;
@@ -52,7 +66,18 @@ namespace LineOfSight
             tiles = room.Tiles;
 
             if (fovShader == null)
-                fovShader = classic ? room.game.rainWorld.Shaders["Basic"] : FShader.CreateShader("LOSShader", Assets.LOSShader);
+                fovShader = (classic || highQuality) ? room.game.rainWorld.Shaders["Basic"] : FShader.CreateShader("LOSShader", Assets.LOSShader);
+            
+            if (renderTexture == null)
+            {
+                renderTexture = new RenderTexture(Futile.screen.pixelWidth, Futile.screen.pixelHeight, 0);
+                renderTexture.filterMode = FilterMode.Point;
+                Futile.atlasManager.LoadAtlasFromTexture("LOS_RenderTexture", renderTexture, false);
+                renderTextureElement = Futile.atlasManager.GetElementWithName("LOS_RenderTexture");
+            }
+
+            if (generatedTypeBlacklist == null)
+                InitializeHiddenTypesSet();
         }
 
         public override void InitiateSprites(RoomCamera.SpriteLeaser sLeaser, RoomCamera rCam)
@@ -62,7 +87,21 @@ namespace LineOfSight
             while (state != MappingState.Done)
                 UpdateMapper(int.MaxValue);
 
-            sLeaser.sprites = new FSprite[2];
+            sLeaser.sprites = new FSprite[3];
+
+            // Full screen colorer used in high quality mode
+            fovColorer = new FSprite("pixel")
+            {
+                anchorX = 0f,
+                anchorY = 0f
+            };
+            fovColorer.shader = room.game.rainWorld.Shaders["Basic"];
+            if (renderTexture != null)
+            {
+                fovColorer.width = renderTexture.width;
+                fovColorer.height = renderTexture.height;
+            }
+            sLeaser.sprites[0] = fovColorer;
 
             // Generate tris
             TriangleMesh.Triangle[] tris = new TriangleMesh.Triangle[edges.Count];
@@ -78,52 +117,47 @@ namespace LineOfSight
             fovBlocker.shader = fovShader;
             corners.CopyTo(fovBlocker.vertices);
             fovBlocker.Refresh();
-            sLeaser.sprites[0] = fovBlocker;
+            sLeaser.sprites[1] = fovBlocker;
 
-            /*fovColorer = new TriangleMesh("Futile_White", tris, false, true);
-            fovColorer.shader = room.game.rainWorld.Shaders["Basic"];
-            corners.CopyTo(fovColorer.vertices);
-            fovColorer.Refresh();
-            sLeaser.sprites[2] = fovColorer;*/
+            if (highQuality)
+                fovBlocker.element = renderTextureElement;
 
-            // Full screen overlay
-
+            // Full screen blocker
             screenBlocker = new FSprite("pixel")
             {
                 anchorX = 0f,
                 anchorY = 0f
             };
             screenBlocker.shader = fovShader;
-            sLeaser.sprites[1] = screenBlocker;
+            sLeaser.sprites[2] = screenBlocker;
 
             AddToContainer(sLeaser, rCam, null);
         }
 
         public override void ApplyPalette(RoomCamera.SpriteLeaser sLeaser, RoomCamera rCam, RoomPalette palette)
         {
-            Color unseenColor = classic ? Color.Lerp(Color.black, palette.blackColor, brightness) : new Color(1f - visibility, 0, 0, 1f);
-            
-            fovBlocker.color = unseenColor;
-            screenBlocker.color = unseenColor;
-            //fovColorer.color = unseenColor;
+            Color unseenColor = Color.Lerp(Color.black, palette.blackColor, brightness);
+
+            Color blockerColor = new Color(1f - visibility, 0, 0, 1f);
+            if (highQuality)
+                blockerColor = Color.white;
+
+            else if (classic)
+                blockerColor = unseenColor;
+
+            //fovColorer.color = new Color(unseenColor.r, unseenColor.g, unseenColor.b, 1f - visibility);
+            fovColorer.color = new Color(unseenColor.r, unseenColor.g, unseenColor.b, 0.5f);
+            fovBlocker.color = blockerColor;
+            screenBlocker.color = blockerColor;
         }
 
         public override void AddToContainer(RoomCamera.SpriteLeaser sLeaser, RoomCamera rCam, FContainer newContainer)
         {
-            FContainer FLightsContainer = rCam.ReturnFContainer("ForegroundLights");
-            FContainer BloomContainer = rCam.ReturnFContainer("Bloom");
+            FContainer container = (classic || highQuality) ? rCam.ReturnFContainer("Bloom") : rCam.ReturnFContainer("ForegroundLights");
 
-            if(LineOfSightMod.classic)
-            {
-                BloomContainer.AddChild(fovBlocker);
-                BloomContainer.AddChild(screenBlocker);
-            } 
-            else
-            {
-                FLightsContainer.AddChild(fovBlocker);
-                FLightsContainer.AddChild(screenBlocker);
-            }
-            //BloomContainer.AddChild(fovColorer);
+            container.AddChild(fovColorer);
+            container.AddChild(fovBlocker);
+            container.AddChild(screenBlocker);
         }
 
         public override void Update(bool eu)
@@ -192,7 +226,6 @@ namespace LineOfSight
                 hideAllSprites = true;
         }
 
-        private Vector2 _lastEyePos;
         private Vector2 _eyePos;
         private Vector2 _lastCamPos;
 
@@ -203,8 +236,6 @@ namespace LineOfSight
                 _lastCamPos = camPos;
                 return;
             }
-
-            _lastEyePos = _eyePos;
 
             if (sLeaser == null || rCam == null) return;
             if (room == null || room.game == null || sLeaser.sprites == null) return;
@@ -223,54 +254,69 @@ namespace LineOfSight
             if (_overrideEyePos.HasValue)
                 _eyePos = Vector2.Lerp(_lastOverrideEyePos, _overrideEyePos.Value, timeStacker);
 
-            // Update FOV blocker mesh
-            if (_eyePos != _lastEyePos)
-            {
-                Vector2 pos;
-                pos.x = 0f;
-                pos.y = 0f;
-                for (int i = 0, len = corners.Count / 2; i < len; i++)
-                {
-                    pos.Set(corners[i].x - _eyePos.x, corners[i].y - _eyePos.y);
-                    pos.Normalize();
-                    fovBlocker.vertices[i].Set(corners[i].x, corners[i].y);
-                    fovBlocker.vertices[i + len].Set(pos.x * 2000f + _eyePos.x, pos.y * 2000f + _eyePos.y);
-                }
+            if (!classic && !highQuality)
+                fovBlocker.element = rCam.levelGraphic.element;
 
-                // Calculate FoV blocker UVs
+            if (highQuality)
+            {
+                DisableAllSprites(rCam);
+
+                fovColorer.isVisible = true;
+                fovColorer.SetPosition(camPos);
+
+                renderTexture.DiscardContents(true, true);
+                Futile.instance.camera.targetTexture = renderTexture;
+                
+                Futile.stage.Redraw(false, false);
+                Futile.stage.LateUpdate();
+                Futile.instance.camera.Render();
+                Futile.instance.camera.targetTexture = Futile.screen.renderTexture;
+
+                EnableAllSprites(rCam);
+                fovColorer.isVisible = false;
+            }
+
+            // Update FOV blocker mesh
+            Vector2 pos;
+            pos.x = 0f;
+            pos.y = 0f;
+            for (int i = 0, len = corners.Count / 2; i < len; i++)
+            {
+                pos.Set(corners[i].x - _eyePos.x, corners[i].y - _eyePos.y);
+                pos.Normalize();
+                fovBlocker.vertices[i].Set(corners[i].x, corners[i].y);
+                fovBlocker.vertices[i + len].Set(pos.x * 2000f + _eyePos.x, pos.y * 2000f + _eyePos.y);
+            }
+
+            // Calculate FoV blocker UVs
+            if(highQuality)
+            {
+                for (int i = fovBlocker.UVvertices.Length - 1; i >= 0; i--)
+                {
+                    Vector2 wPos = fovBlocker.vertices[i] - _lastCamPos;
+                    fovBlocker.UVvertices[i].x = InverseLerpUnclamped(0, renderTexture.width, wPos.x - 0.5f);
+                    fovBlocker.UVvertices[i].y = InverseLerpUnclamped(0, renderTexture.height, wPos.y + 0.5f);
+                }
+            }
+            else if (!classic)
+            {
                 for (int i = fovBlocker.UVvertices.Length - 1; i >= 0; i--)
                 {
                     Vector2 wPos = fovBlocker.vertices[i] - _lastCamPos;
                     fovBlocker.UVvertices[i].x = InverseLerpUnclamped(rCam.levelGraphic.x, rCam.levelGraphic.x + rCam.levelGraphic.width, wPos.x);
                     fovBlocker.UVvertices[i].y = InverseLerpUnclamped(rCam.levelGraphic.y, rCam.levelGraphic.y + rCam.levelGraphic.height, wPos.y);
                 }
-                fovBlocker.Refresh();
             }
+            fovBlocker.Refresh();
 
             fovBlocker.x = -_lastCamPos.x;
             fovBlocker.y = -_lastCamPos.y;
 
-            /*fovColorer.vertices = fovBlocker.vertices;
-            fovColorer.UVvertices = fovBlocker.UVvertices;
-            fovColorer.Refresh();
-            fovColorer.x = -_lastCamPos.x;
-            fovColorer.y = -_lastCamPos.y;*/
-
-            if (!classic && fovBlocker.element != rCam.levelGraphic.element)
-                fovBlocker.element = rCam.levelGraphic.element;
-
             // Block the screen when inside a wall
+            if (room.GetTile(room.GetTilePosition(_eyePos)).Solid)
             {
-                IntVector2 tPos = room.GetTilePosition(_eyePos);
-                if (tPos.x < 0) tPos.x = 0;
-                if (tPos.x >= room.TileWidth) tPos.x = room.TileWidth - 1;
-                if (tPos.y < 0) tPos.y = 0;
-                if (tPos.y >= room.TileHeight) tPos.y = room.TileHeight - 1;
-                if (tiles[tPos.x, tPos.y].Solid)
-                {
-                    lastScreenblockAlpha = 1f;
-                    screenblockAlpha = 1f;
-                }
+                lastScreenblockAlpha = 1f;
+                screenblockAlpha = 1f;
             }
 
             // Move the screenblock
@@ -278,36 +324,130 @@ namespace LineOfSight
             if (alpha == 0f)
             {
                 screenBlocker.isVisible = false;
-                //fovColorer.alpha = 1f;
             }
             else
             {
-                screenBlocker.scaleX = rCam.levelGraphic.scaleX;
-                screenBlocker.scaleY = rCam.levelGraphic.scaleY;
-                screenBlocker.x = rCam.levelGraphic.x;
-                screenBlocker.y = rCam.levelGraphic.y;
-                if (LineOfSightMod.classic)
-                {
-                    // Must be resized to fit the level image
-                    screenBlocker.width = rCam.levelGraphic.width;
-                    screenBlocker.height = rCam.levelGraphic.height;
-                }
-                else if (screenBlocker.element != rCam.levelGraphic.element)
-                    screenBlocker.element = rCam.levelGraphic.element;
                 screenBlocker.alpha = alpha;
-                //fovColorer.alpha = 1f - alpha;
+                if (highQuality)
+                {
+                    screenBlocker.SetPosition(camPos.x + 0.5f, camPos.y - 0.5f);
+                    screenBlocker.element = renderTextureElement;
+                }
+                else
+                {
+                    screenBlocker.scaleX = rCam.levelGraphic.scaleX;
+                    screenBlocker.scaleY = rCam.levelGraphic.scaleY;
+                    screenBlocker.SetPosition(rCam.levelGraphic.GetPosition());
+                    if (classic)
+                    {
+                        // Must be resized to fit the level image
+                        screenBlocker.width = rCam.levelGraphic.width;
+                        screenBlocker.height = rCam.levelGraphic.height;
+                    }
+                    else
+                        screenBlocker.element = rCam.levelGraphic.element;
+                }
             }
+            screenBlocker.alpha = 1f;
+            fovBlocker.alpha = 1f;
 
             // Keep on top
             if (screenBlocker.container.GetChildAt(screenBlocker.container.GetChildCount() - 1) != screenBlocker)
             {
+                fovColorer.MoveToFront();
                 fovBlocker.MoveToFront();
                 screenBlocker.MoveToFront();
             }
-            /*if (fovColorer.container.GetChildAt(fovColorer.container.GetChildCount() - 1) != fovColorer)
-                fovColorer.MoveToFront();*/
 
             base.DrawSprites(sLeaser, rCam, timeStacker, _lastCamPos);
+        }
+        
+        List<FNode> nodesHidden = new List<FNode>();
+
+        private void DisableAllSprites(RoomCamera rCam)
+        {
+            //hide blacklisted Idrawable types
+            foreach (RoomCamera.SpriteLeaser sLeaser in rCam.spriteLeasers)
+            {
+                if (generatedTypeBlacklist.Contains(sLeaser.drawableObject.GetType()) //if drawable is a type we want to hide
+                    || ( typeof(LightSource).IsInstanceOfType(sLeaser.drawableObject) && generatedTypeBlacklist.Contains(((LightSource)sLeaser.drawableObject).tiedToObject?.GetType())) //if drawable is a light and attached to a type we want to hide
+                    ) 
+                    foreach (FSprite sprite in sLeaser.sprites)
+                        DisableNode(sprite);
+            }
+
+            //temporate code to hide shortcut sprites
+            foreach (FSprite sprite in rCam.shortcutGraphics.sprites.Values)
+                DisableNode(sprite);
+
+            //Hide HUD
+            foreach (FNode node in rCam.ReturnFContainer("HUD")._childNodes)
+                DisableNode(node);
+            foreach (FNode node in rCam.ReturnFContainer("HUD2")._childNodes)
+                DisableNode(node);
+
+            //Hide blockers
+            DisableNode(fovBlocker);
+            DisableNode(screenBlocker);
+        }
+
+        private void DisableNode(FNode node)
+        {
+            if (node != null && node.isVisible)
+            {
+                nodesHidden.Add(node);
+                node.isVisible = false;
+            }
+        }
+
+        private void EnableAllSprites(RoomCamera rCam)
+        {
+            foreach (FNode node in nodesHidden)
+                node.isVisible = true;
+            nodesHidden.Clear();
+        }
+
+        public static void AddBlacklistedTypes(Type[] drawableTypes)
+        {
+            foreach (Type drawableType in drawableTypes)
+                blacklistedTypes.Add(drawableType);
+        }
+
+        public static void RemoveBlacklistedTypes(Type[] drawableTypes)
+        {
+            foreach (Type drawableType in drawableTypes)
+                blacklistedTypes.Remove(drawableType);
+        }
+
+        public static void AddWhitelistedTypes(Type[] drawableTypes)
+        {
+            foreach (Type drawableType in drawableTypes)
+                whitelistedTypes.Add(drawableType);
+        }
+
+        public static void RemoveWhitelistedTypes(Type[] drawableTypes)
+        {
+            foreach (Type drawableType in drawableTypes)
+                whitelistedTypes.Remove(drawableType);
+        }
+
+        public static void InitializeHiddenTypesSet()
+        {
+            generatedTypeBlacklist = new HashSet<Type>();
+            List<Type> allWhitelistedTypes = new List<Type>();
+
+            foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+                foreach (Type type in assembly.GetTypes())
+                {
+                    foreach (Type blacklistedType in blacklistedTypes) 
+                        if (type.IsSubclassOf(blacklistedType) || type == blacklistedType)
+                            generatedTypeBlacklist.Add(type);
+                    foreach (Type whitelistedType in whitelistedTypes)
+                        if (type.IsSubclassOf(whitelistedType) || type == whitelistedType)
+                            allWhitelistedTypes.Add(type);
+                }
+            foreach (Type drawableType in allWhitelistedTypes)
+                generatedTypeBlacklist.Remove(drawableType);
         }
 
         private float InverseLerpUnclamped(float from, float to, float t)
