@@ -10,7 +10,7 @@ namespace LineOfSight
 	{
 		public static AssetBundle AssetBundle;
 		public const string bundleName = "losbundle";
-		private static Shader Shader;
+		
 		public static string AssetBundlePath
 		{
 			get
@@ -19,16 +19,30 @@ namespace LineOfSight
 			}
 		}
 
-		public static Shader LOSShader
+        private static Shader LevelOutOfFOVShader;
+        public static Shader LevelOutOfFOV
         {
             get
             {
 				if (AssetBundle == null)
 					AssetBundle = AssetBundle.LoadFromFile(AssetBundlePath);
-				if (Shader == null)
-					Shader = AssetBundle.LoadAsset<Shader>("LOSShader.shader");
-				return Shader;
+				if (LevelOutOfFOVShader == null)
+                    LevelOutOfFOVShader = AssetBundle.LoadAsset<Shader>("LevelOutOfFOV.shader");
+				return LevelOutOfFOVShader;
 			}
         }
-	}
+
+        private static Shader RenderOutOfFOVShader;
+        public static Shader RenderOutOfFOV
+        {
+            get
+            {
+                if (AssetBundle == null)
+                    AssetBundle = AssetBundle.LoadFromFile(AssetBundlePath);
+                if (RenderOutOfFOVShader == null)
+                    RenderOutOfFOVShader = AssetBundle.LoadAsset<Shader>("RenderOutOfFOV.shader");
+                return RenderOutOfFOVShader;
+            }
+        }
+    }
 }

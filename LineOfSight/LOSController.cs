@@ -16,24 +16,30 @@ namespace LineOfSight
     {
         internal static bool hackToDelayDrawingUntilAfterTheLevelMoves;
 
+        public enum RenderMode
+        {
+            Classic,
+            Fast,
+            Fancy
+        }
+
+        //config variables
+        public static RenderMode renderMode;
+        public static float visibility;
+        public static float brightness;
+        public static float tileSize;
+
         //Hide sprites in high quality mode
         public static HashSet<Type> blacklistedTypes = new HashSet<Type>();
         public static HashSet<Type> whitelistedTypes = new HashSet<Type>();
         public static HashSet<Type> generatedTypeBlacklist;
 
-        //config variables
-        public static bool classic;
-        public static bool highQuality = true;
-        public static float visibility;
-        public static float brightness;
-        public static float tileSize;
-
+        //shaders
         public static FShader fovShader;
         public static RenderTexture renderTexture;
         public static FAtlasElement renderTextureElement;
 
         //Sprites
-        private FSprite fovColorer;
         private TriangleMesh fovBlocker;
         private FSprite screenBlocker;
 
@@ -66,11 +72,19 @@ namespace LineOfSight
             tiles = room.Tiles;
 
             if (fovShader == null)
-                fovShader = (classic || highQuality) ? room.game.rainWorld.Shaders["Basic"] : FShader.CreateShader("LOSShader", Assets.LOSShader);
+                switch (renderMode)
+                {
+                    case RenderMode.Classic: fovShader = room.game.rainWorld.Shaders["Basic"]; break;
+                    case RenderMode.Fast: fovShader = FShader.CreateShader("LevelOutOfFOV", Assets.LevelOutOfFOV); break;
+                    case RenderMode.Fancy:
+                        fovShader = FShader.CreateShader("RenderOutOfFOV", Assets.RenderOutOfFOV);
+                        Shader.SetGlobalFloat("_los_visibility", visibility);
+                        break;
+                }
             
             if (renderTexture == null)
             {
-                renderTexture = new RenderTexture(Futile.screen.pixelWidth, Futile.screen.pixelHeight, 0);
+                renderTexture = new RenderTexture(Futile.screen.renderTexture.descriptor);
                 renderTexture.filterMode = FilterMode.Point;
                 Futile.atlasManager.LoadAtlasFromTexture("LOS_RenderTexture", renderTexture, false);
                 renderTextureElement = Futile.atlasManager.GetElementWithName("LOS_RenderTexture");
@@ -87,21 +101,7 @@ namespace LineOfSight
             while (state != MappingState.Done)
                 UpdateMapper(int.MaxValue);
 
-            sLeaser.sprites = new FSprite[3];
-
-            // Full screen colorer used in high quality mode
-            fovColorer = new FSprite("pixel")
-            {
-                anchorX = 0f,
-                anchorY = 0f
-            };
-            fovColorer.shader = room.game.rainWorld.Shaders["Basic"];
-            if (renderTexture != null)
-            {
-                fovColorer.width = renderTexture.width;
-                fovColorer.height = renderTexture.height;
-            }
-            sLeaser.sprites[0] = fovColorer;
+            sLeaser.sprites = new FSprite[2];
 
             // Generate tris
             TriangleMesh.Triangle[] tris = new TriangleMesh.Triangle[edges.Count];
@@ -117,10 +117,7 @@ namespace LineOfSight
             fovBlocker.shader = fovShader;
             corners.CopyTo(fovBlocker.vertices);
             fovBlocker.Refresh();
-            sLeaser.sprites[1] = fovBlocker;
-
-            if (highQuality)
-                fovBlocker.element = renderTextureElement;
+            sLeaser.sprites[0] = fovBlocker;
 
             // Full screen blocker
             screenBlocker = new FSprite("pixel")
@@ -129,7 +126,7 @@ namespace LineOfSight
                 anchorY = 0f
             };
             screenBlocker.shader = fovShader;
-            sLeaser.sprites[2] = screenBlocker;
+            sLeaser.sprites[1] = screenBlocker;
 
             AddToContainer(sLeaser, rCam, null);
         }
@@ -138,26 +135,22 @@ namespace LineOfSight
         {
             Color unseenColor = Color.Lerp(Color.black, palette.blackColor, brightness);
 
-            Color blockerColor = new Color(1f - visibility, 0, 0, 1f);
-            if (highQuality)
-                blockerColor = Color.white;
-
-            else if (classic)
+            Color blockerColor;
+            if (renderMode == RenderMode.Fast)
+                blockerColor = new Color(1f - visibility, 0, 0, 1f);
+            else
                 blockerColor = unseenColor;
 
-            //fovColorer.color = new Color(unseenColor.r, unseenColor.g, unseenColor.b, 1f - visibility);
-            fovColorer.color = new Color(unseenColor.r, unseenColor.g, unseenColor.b, 0.5f);
             fovBlocker.color = blockerColor;
             screenBlocker.color = blockerColor;
         }
 
         public override void AddToContainer(RoomCamera.SpriteLeaser sLeaser, RoomCamera rCam, FContainer newContainer)
         {
-            FContainer container = (classic || highQuality) ? rCam.ReturnFContainer("Bloom") : rCam.ReturnFContainer("ForegroundLights");
+            FContainer container = (renderMode == RenderMode.Fast) ? rCam.ReturnFContainer("ForegroundLights") : rCam.ReturnFContainer("Bloom");
 
-            container.AddChild(fovColorer);
-            container.AddChild(fovBlocker);
-            container.AddChild(screenBlocker);
+            foreach (FSprite sprite in sLeaser.sprites)
+                container.AddChild(sprite);
         }
 
         public override void Update(bool eu)
@@ -254,26 +247,18 @@ namespace LineOfSight
             if (_overrideEyePos.HasValue)
                 _eyePos = Vector2.Lerp(_lastOverrideEyePos, _overrideEyePos.Value, timeStacker);
 
-            if (!classic && !highQuality)
-                fovBlocker.element = rCam.levelGraphic.element;
-
-            if (highQuality)
+            //Fancy out of fov render
+            if (renderMode == RenderMode.Fancy)
             {
                 DisableAllSprites(rCam);
 
-                fovColorer.isVisible = true;
-                fovColorer.SetPosition(camPos);
-
-                renderTexture.DiscardContents(true, true);
                 Futile.instance.camera.targetTexture = renderTexture;
-                
                 Futile.stage.Redraw(false, false);
                 Futile.stage.LateUpdate();
                 Futile.instance.camera.Render();
                 Futile.instance.camera.targetTexture = Futile.screen.renderTexture;
 
                 EnableAllSprites(rCam);
-                fovColorer.isVisible = false;
             }
 
             // Update FOV blocker mesh
@@ -289,7 +274,7 @@ namespace LineOfSight
             }
 
             // Calculate FoV blocker UVs
-            if(highQuality)
+            if(renderMode == RenderMode.Fancy)
             {
                 for (int i = fovBlocker.UVvertices.Length - 1; i >= 0; i--)
                 {
@@ -297,8 +282,9 @@ namespace LineOfSight
                     fovBlocker.UVvertices[i].x = InverseLerpUnclamped(0, renderTexture.width, wPos.x - 0.5f);
                     fovBlocker.UVvertices[i].y = InverseLerpUnclamped(0, renderTexture.height, wPos.y + 0.5f);
                 }
+                fovBlocker.element = renderTextureElement;
             }
-            else if (!classic)
+            else if (renderMode == RenderMode.Fast)
             {
                 for (int i = fovBlocker.UVvertices.Length - 1; i >= 0; i--)
                 {
@@ -306,6 +292,7 @@ namespace LineOfSight
                     fovBlocker.UVvertices[i].x = InverseLerpUnclamped(rCam.levelGraphic.x, rCam.levelGraphic.x + rCam.levelGraphic.width, wPos.x);
                     fovBlocker.UVvertices[i].y = InverseLerpUnclamped(rCam.levelGraphic.y, rCam.levelGraphic.y + rCam.levelGraphic.height, wPos.y);
                 }
+                fovBlocker.element = rCam.levelGraphic.element;
             }
             fovBlocker.Refresh();
 
@@ -327,37 +314,33 @@ namespace LineOfSight
             }
             else
             {
+                screenBlocker.isVisible = true;
                 screenBlocker.alpha = alpha;
-                if (highQuality)
+
+                switch (renderMode)
                 {
-                    screenBlocker.SetPosition(camPos.x + 0.5f, camPos.y - 0.5f);
-                    screenBlocker.element = renderTextureElement;
-                }
-                else
-                {
-                    screenBlocker.scaleX = rCam.levelGraphic.scaleX;
-                    screenBlocker.scaleY = rCam.levelGraphic.scaleY;
-                    screenBlocker.SetPosition(rCam.levelGraphic.GetPosition());
-                    if (classic)
-                    {
-                        // Must be resized to fit the level image
-                        screenBlocker.width = rCam.levelGraphic.width;
-                        screenBlocker.height = rCam.levelGraphic.height;
-                    }
-                    else
+                    case RenderMode.Classic:
+                        screenBlocker.width = Futile.screen.pixelWidth;
+                        screenBlocker.width = Futile.screen.pixelHeight;
+                        break;
+                    case RenderMode.Fast:
+                        screenBlocker.scaleX = rCam.levelGraphic.scaleX;
+                        screenBlocker.scaleY = rCam.levelGraphic.scaleY;
+                        screenBlocker.SetPosition(rCam.levelGraphic.GetPosition());
                         screenBlocker.element = rCam.levelGraphic.element;
+                        break;
+                    case RenderMode.Fancy:
+                        screenBlocker.SetPosition(camPos.x + 0.5f, camPos.y - 0.5f);
+                        screenBlocker.element = renderTextureElement;
+                        break;
                 }
             }
-            screenBlocker.alpha = 1f;
-            fovBlocker.alpha = 1f;
 
             // Keep on top
-            if (screenBlocker.container.GetChildAt(screenBlocker.container.GetChildCount() - 1) != screenBlocker)
-            {
-                fovColorer.MoveToFront();
-                fovBlocker.MoveToFront();
-                screenBlocker.MoveToFront();
-            }
+            FSprite topSprite = sLeaser.sprites[sLeaser.sprites.Length-1];
+            if (topSprite.container.GetChildAt(topSprite.container.GetChildCount() - 1) != topSprite)
+                foreach (FSprite sprite in sLeaser.sprites)
+                    sprite.MoveToFront();
 
             base.DrawSprites(sLeaser, rCam, timeStacker, _lastCamPos);
         }
