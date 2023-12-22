@@ -18,7 +18,8 @@ namespace LineOfSight
 		private bool initialized = false;
 
 		public static Type[] blacklist = {
-			typeof(PhysicalObject),
+            typeof(LOSController),
+            typeof(PhysicalObject),
 			typeof(SporeCloud),
 			typeof(SlimeMoldLight),
 			typeof(Bubble),
@@ -34,11 +35,8 @@ namespace LineOfSight
             typeof(CentipedeShell),
         };
 
-        public static Type[] Whitelist = { 
-			typeof(LOSController),
-			typeof(PlayerGraphics), 
-			typeof(OverseerGraphics), 
-			typeof(PoleMimicGraphics) 
+        public static Type[] whitelist = { 
+			typeof(PlayerGraphics)
 		};
 
         // FOR MULTIPLE PLAYERS:
@@ -57,7 +55,7 @@ namespace LineOfSight
 			On.RainWorld.OnModsInit += OnModInit;
 
             LOSController.AddBlacklistedTypes(blacklist);
-			LOSController.AddWhitelistedTypes(Whitelist);
+			LOSController.AddWhitelistedTypes(whitelist);
         }
 
 		private void OnModInit(On.RainWorld.orig_OnModsInit orig, RainWorld self)

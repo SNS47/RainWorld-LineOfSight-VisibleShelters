@@ -29,15 +29,62 @@ namespace LineOfSight
         public static float brightness;
         public static float tileSize;
 
-        //Hide sprites in high quality mode
-        public static HashSet<Type> blacklistedTypes = new HashSet<Type>();
-        public static HashSet<Type> whitelistedTypes = new HashSet<Type>();
-        public static HashSet<Type> generatedTypeBlacklist;
+        //Hide sprites in fancy mode
+        private static HashSet<Type> blacklistedTypes = new HashSet<Type>();
+        private static HashSet<Type> whitelistedTypes = new HashSet<Type>();
+        private static HashSet<Type> generatedTypeBlacklist;
 
         //shaders
         public static FShader fovShader;
         public static RenderTexture renderTexture;
         public static FAtlasElement renderTextureElement;
+
+        public static void AddBlacklistedTypes(params Type[] drawableTypes)
+        {
+            foreach (Type drawableType in drawableTypes)
+                blacklistedTypes.Add(drawableType);
+            generatedTypeBlacklist = null;
+        }
+
+        public static void RemoveBlacklistedTypes(params Type[] drawableTypes)
+        {
+            foreach (Type drawableType in drawableTypes)
+                blacklistedTypes.Remove(drawableType);
+            generatedTypeBlacklist = null;
+        }
+
+        public static void AddWhitelistedTypes(params Type[] drawableTypes)
+        {
+            foreach (Type drawableType in drawableTypes)
+                whitelistedTypes.Add(drawableType);
+            generatedTypeBlacklist = null;
+        }
+
+        public static void RemoveWhitelistedTypes(params Type[] drawableTypes)
+        {
+            foreach (Type drawableType in drawableTypes)
+                whitelistedTypes.Remove(drawableType);
+            generatedTypeBlacklist = null;
+        }
+
+        private static void GenerateTypeBlacklist()
+        {
+            generatedTypeBlacklist = new HashSet<Type>();
+            List<Type> allWhitelistedTypes = new List<Type>();
+
+            foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+                foreach (Type type in assembly.GetTypes())
+                {
+                    foreach (Type blacklistedType in blacklistedTypes)
+                        if (type.IsSubclassOf(blacklistedType) || type == blacklistedType)
+                            generatedTypeBlacklist.Add(type);
+                    foreach (Type whitelistedType in whitelistedTypes)
+                        if (type.IsSubclassOf(whitelistedType) || type == whitelistedType)
+                            allWhitelistedTypes.Add(type);
+                }
+            foreach (Type drawableType in allWhitelistedTypes)
+                generatedTypeBlacklist.Remove(drawableType);
+        }
 
         //Sprites
         private TriangleMesh fovBlocker;
@@ -71,6 +118,7 @@ namespace LineOfSight
             _y = 0;
             tiles = room.Tiles;
 
+            //Initialize fovShader
             if (fovShader == null)
                 switch (renderMode)
                 {
@@ -81,17 +129,25 @@ namespace LineOfSight
                         Shader.SetGlobalFloat("_los_visibility", visibility);
                         break;
                 }
-            
-            if (renderTexture == null)
-            {
-                renderTexture = new RenderTexture(Futile.screen.renderTexture.descriptor);
-                renderTexture.filterMode = FilterMode.Point;
-                Futile.atlasManager.LoadAtlasFromTexture("LOS_RenderTexture", renderTexture, false);
-                renderTextureElement = Futile.atlasManager.GetElementWithName("LOS_RenderTexture");
-            }
 
-            if (generatedTypeBlacklist == null)
-                InitializeHiddenTypesSet();
+            //Initialize Fancy mode
+            if(renderMode == RenderMode.Fancy)
+            {
+                if (renderTexture != null
+                    && (renderTexture.width != Futile.screen.renderTexture.width || renderTexture.height != Futile.screen.renderTexture.height))
+                {
+                    renderTexture = null;
+                    Futile.atlasManager.ActuallyUnloadAtlasOrImage("LOS_RenderTexture");
+                    renderTextureElement = null;
+                }
+                if (renderTexture == null)
+                {
+                    renderTexture = new RenderTexture(Futile.screen.renderTexture.descriptor);
+                    renderTexture.filterMode = FilterMode.Point;
+                    Futile.atlasManager.LoadAtlasFromTexture("LOS_RenderTexture", renderTexture, false);
+                    renderTextureElement = Futile.atlasManager.GetElementWithName("LOS_RenderTexture");
+                }
+            }
         }
 
         public override void InitiateSprites(RoomCamera.SpriteLeaser sLeaser, RoomCamera rCam)
@@ -320,8 +376,9 @@ namespace LineOfSight
                 switch (renderMode)
                 {
                     case RenderMode.Classic:
-                        screenBlocker.width = Futile.screen.pixelWidth;
-                        screenBlocker.width = Futile.screen.pixelHeight;
+                        screenBlocker.width = Futile.screen.renderTexture.width;
+                        screenBlocker.height = Futile.screen.renderTexture.height;
+                        screenBlocker.SetPosition(camPos.x + 0.5f, camPos.y - 0.5f);
                         break;
                     case RenderMode.Fast:
                         screenBlocker.scaleX = rCam.levelGraphic.scaleX;
@@ -345,10 +402,14 @@ namespace LineOfSight
             base.DrawSprites(sLeaser, rCam, timeStacker, _lastCamPos);
         }
         
-        List<FNode> nodesHidden = new List<FNode>();
+        private List<FNode> nodesHidden = new List<FNode>();
 
         private void DisableAllSprites(RoomCamera rCam)
         {
+            //generate type set blacklist
+            if (generatedTypeBlacklist == null)
+                GenerateTypeBlacklist();
+
             //hide blacklisted Idrawable types
             foreach (RoomCamera.SpriteLeaser sLeaser in rCam.spriteLeasers)
             {
@@ -368,10 +429,6 @@ namespace LineOfSight
                 DisableNode(node);
             foreach (FNode node in rCam.ReturnFContainer("HUD2")._childNodes)
                 DisableNode(node);
-
-            //Hide blockers
-            DisableNode(fovBlocker);
-            DisableNode(screenBlocker);
         }
 
         private void DisableNode(FNode node)
@@ -388,49 +445,6 @@ namespace LineOfSight
             foreach (FNode node in nodesHidden)
                 node.isVisible = true;
             nodesHidden.Clear();
-        }
-
-        public static void AddBlacklistedTypes(Type[] drawableTypes)
-        {
-            foreach (Type drawableType in drawableTypes)
-                blacklistedTypes.Add(drawableType);
-        }
-
-        public static void RemoveBlacklistedTypes(Type[] drawableTypes)
-        {
-            foreach (Type drawableType in drawableTypes)
-                blacklistedTypes.Remove(drawableType);
-        }
-
-        public static void AddWhitelistedTypes(Type[] drawableTypes)
-        {
-            foreach (Type drawableType in drawableTypes)
-                whitelistedTypes.Add(drawableType);
-        }
-
-        public static void RemoveWhitelistedTypes(Type[] drawableTypes)
-        {
-            foreach (Type drawableType in drawableTypes)
-                whitelistedTypes.Remove(drawableType);
-        }
-
-        public static void InitializeHiddenTypesSet()
-        {
-            generatedTypeBlacklist = new HashSet<Type>();
-            List<Type> allWhitelistedTypes = new List<Type>();
-
-            foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
-                foreach (Type type in assembly.GetTypes())
-                {
-                    foreach (Type blacklistedType in blacklistedTypes) 
-                        if (type.IsSubclassOf(blacklistedType) || type == blacklistedType)
-                            generatedTypeBlacklist.Add(type);
-                    foreach (Type whitelistedType in whitelistedTypes)
-                        if (type.IsSubclassOf(whitelistedType) || type == whitelistedType)
-                            allWhitelistedTypes.Add(type);
-                }
-            foreach (Type drawableType in allWhitelistedTypes)
-                generatedTypeBlacklist.Remove(drawableType);
         }
 
         private float InverseLerpUnclamped(float from, float to, float t)
