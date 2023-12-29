@@ -29,6 +29,7 @@ namespace LineOfSight
         public static float visibility;
         public static float brightness;
         public static float tileSize;
+        public static float viewRange;
 
         //Hide sprites in fancy mode
         private static HashSet<Type> blacklistedTypes = new HashSet<Type>();
@@ -110,8 +111,6 @@ namespace LineOfSight
             }
         }
         private PlayerFovInfo[] playerInfo;
-        public float lastScreenblockAlpha;
-        public float screenblockAlpha;
         
         public enum MappingState
         {
@@ -138,8 +137,13 @@ namespace LineOfSight
             if (fovShader == null)
                 switch (renderMode)
                 {
-                    case RenderMode.Classic: fovShader = room.game.rainWorld.Shaders["Basic"]; break;
-                    case RenderMode.Fast: fovShader = FShader.CreateShader("LevelOutOfFOV", Assets.LevelOutOfFOV); break;
+                    case RenderMode.Classic:
+                        fovShader = FShader.CreateShader("RenderOutOfFOV", Assets.RenderOutOfFOV);
+                        Shader.SetGlobalFloat("_los_visibility", 0f);
+                        break;
+                    case RenderMode.Fast: 
+                        fovShader = FShader.CreateShader("LevelOutOfFOV", Assets.LevelOutOfFOV); 
+                        break;
                     case RenderMode.Fancy:
                         fovShader = FShader.CreateShader("RenderOutOfFOV", Assets.RenderOutOfFOV);
                         Shader.SetGlobalFloat("_los_visibility", visibility);
@@ -178,7 +182,7 @@ namespace LineOfSight
             while (state != MappingState.Done)
                 UpdateMapper(int.MaxValue);
 
-            sLeaser.sprites = new FSprite[playerCount * 2 + 2];
+            sLeaser.sprites = new FSprite[playerCount * 3 + 2];
 
             FSprite preBlocker = new FSprite("pixel")
             {
@@ -191,20 +195,41 @@ namespace LineOfSight
             // Generate tris
             for (int p =  0; p < playerCount; p++)
             {
-                TriangleMesh.Triangle[] tris = new TriangleMesh.Triangle[edges.Count];
+                // Block outside of FoV
+                TriangleMesh.Triangle[] fovTris = new TriangleMesh.Triangle[edges.Count];
                 for (int i = 0, len = edges.Count / 2; i < len; i++)
                 {
                     int o = i * 2;
-                    tris[o] = new TriangleMesh.Triangle(edges[o], edges[o + 1], edges[o] + corners.Count / 2);
-                    tris[o + 1] = new TriangleMesh.Triangle(edges[o + 1], edges[o + 1] + corners.Count / 2, edges[o] + corners.Count / 2);
+                    fovTris[o] = new TriangleMesh.Triangle(edges[o], edges[o + 1], edges[o] + corners.Count / 2);
+                    fovTris[o + 1] = new TriangleMesh.Triangle(edges[o + 1], edges[o + 1] + corners.Count / 2, edges[o] + corners.Count / 2);
                 }
 
-                // Block outside of FoV
-                TriangleMesh fovBlocker = new TriangleMesh("Futile_White", tris, false, true);
+                TriangleMesh fovBlocker = new TriangleMesh("Futile_White", fovTris, false, true);
                 fovBlocker.shader = Assets.FovBlockerStencil;
                 corners.CopyTo(fovBlocker.vertices);
                 fovBlocker.Refresh();
-                sLeaser.sprites[p * 2 + 1] = fovBlocker;
+                sLeaser.sprites[p * 3 + 1] = fovBlocker;
+
+                // Block outside of range
+                int rCount = 120;
+
+                TriangleMesh.Triangle[] rangeTris = new TriangleMesh.Triangle[rCount * 2];
+                for (int v1 = 0; v1 < rCount * 2; v1++)
+                {
+                    int v2 = (v1 + 1) % (rCount * 2);
+                    int v3 = (v1 + 2) % (rCount * 2);
+                    rangeTris[v1] = new TriangleMesh.Triangle(v1, v2, v3);
+                }
+
+                TriangleMesh rangeBlocker = new TriangleMesh("Futile_White", rangeTris, false, true);
+                for (int i = 0; i < rCount; i++)
+                {
+                    rangeBlocker.vertices[i * 2] = Custom.DegToVec(i * 360f / rCount) * viewRange;
+                    rangeBlocker.vertices[i * 2 + 1] = Custom.DegToVec(i * 360f / rCount) * 50000f; //reallly fucking far. should never be on screen.
+                }
+                rangeBlocker.shader = Assets.FovBlockerStencil;
+                rangeBlocker.Refresh();
+                sLeaser.sprites[p * 3 + 2] = rangeBlocker;
 
                 // Full screen blocker
                 FSprite screenBlocker = new FSprite("pixel")
@@ -214,7 +239,7 @@ namespace LineOfSight
                 };
                 screenBlocker.element = Assets.Bayer16Dither;
                 screenBlocker.shader = Assets.ScreenBlockerStencil;
-                sLeaser.sprites[p * 2 + 2] = screenBlocker;
+                sLeaser.sprites[p * 3 + 3] = screenBlocker;
             }
 
             FSprite finalBlocker = new FSprite("pixel")
@@ -223,14 +248,14 @@ namespace LineOfSight
                 anchorY = 0f
             };
             finalBlocker.shader = fovShader;
-            sLeaser.sprites[playerCount * 2 + 1] = finalBlocker;
+            sLeaser.sprites[playerCount * 3 + 1] = finalBlocker;
 
             AddToContainer(sLeaser, rCam, null);
         }
 
         public override void ApplyPalette(RoomCamera.SpriteLeaser sLeaser, RoomCamera rCam, RoomPalette palette)
         {
-            FSprite finalBlocker = sLeaser.sprites[playerCount * 2 + 1];
+            FSprite finalBlocker = sLeaser.sprites[playerCount * 3 + 1];
             if (renderMode == RenderMode.Fast)
                 finalBlocker.color = new Color(1f - visibility, 0, 0, 1f);
             else
@@ -273,34 +298,44 @@ namespace LineOfSight
                 ShortcutHandler.ShortCutVessel plyVessel = room.game.shortcuts.transportVessels.Find(x => x.creature == ply);
                 PlayerFovInfo fovInfo = playerInfo[p];
 
-                // Player not in room
-                if (ply == null || ( ply.room != room && plyVessel?.room.realizedRoom != room ) )
+                fovInfo.lastEyePos = fovInfo.eyePos.HasValue ? fovInfo.eyePos.Value : null;
+                fovInfo.lastScreenblockAlpha = fovInfo.screenblockAlpha;
+
+                // Player null or not in room
+                if (ply == null || (ply.room != room && plyVessel?.room.realizedRoom != room))
                 {
-                    fovInfo.Clear();
+                    if (fovInfo.screenblockAlpha == 1f || !fovInfo.eyePos.HasValue)
+                        fovInfo.Clear();
+                    else
+                        fovInfo.screenblockAlpha = Mathf.Clamp01(fovInfo.screenblockAlpha + 0.1f);
                     continue;
                 }
 
                 // Update eye position and screenblock alpha
-                fovInfo.lastEyePos = fovInfo.eyePos.HasValue ? fovInfo.eyePos.Value : null;
-                fovInfo.lastScreenblockAlpha = fovInfo.screenblockAlpha;
-
                 BodyChunk headChunk = room.game.Players[p].realizedCreature?.bodyChunks[0];
                 if (headChunk != null)
-                {
                     fovInfo.eyePos = headChunk.pos;
-                }
 
-                if ((plyVessel != null && plyVessel.entranceNode != -1))
-                    fovInfo.screenblockAlpha = Mathf.Clamp01(fovInfo.screenblockAlpha + 0.1f);
-                else
-                    fovInfo.screenblockAlpha = Mathf.Clamp01(fovInfo.screenblockAlpha - 0.1f);
-
-                // Allow vision when going through shortcuts
                 if (plyVessel != null)
                 {
                     fovInfo.eyePos = Vector2.Lerp(plyVessel.lastPos.ToVector2(), plyVessel.pos.ToVector2(), (room.game.updateShortCut + 1) / 3f) * 20f + new Vector2(10f, 10f);
-                    if (plyVessel.room.realizedRoom != null)
-                        screenblockAlpha = plyVessel.room.realizedRoom.GetTile(fovInfo.eyePos.Value).Solid ? 1f : Mathf.Clamp01(screenblockAlpha - 0.2f);
+                }
+
+                if (!fovInfo.eyePos.HasValue)
+                    continue;
+
+                bool justEntered = (!fovInfo.lastEyePos.HasValue) ? true : false;
+
+                // Test for blindness
+                if (ply.Consious && !ply.Sleeping && ply.sleepCurlUp != 1f)
+                    fovInfo.screenblockAlpha = justEntered ? 0f : Mathf.Clamp01(fovInfo.screenblockAlpha - 0.1f);
+                else
+                    fovInfo.screenblockAlpha = justEntered ? 1f : Mathf.Clamp01(fovInfo.screenblockAlpha + 0.1f);
+
+                if (plyVessel != null && plyVessel.room.realizedRoom == null) // room not realized???
+                {
+                    fovInfo.screenblockAlpha = 1f;
+                    fovInfo.lastScreenblockAlpha = 1f;
                 }
 
                 fovInfo.lastEyePos = fovInfo.lastEyePos.HasValue ? fovInfo.lastEyePos.Value : (fovInfo.eyePos.HasValue ? fovInfo.eyePos.Value : null);
@@ -349,8 +384,9 @@ namespace LineOfSight
             //update blockers for each player
             for (int p = 0; p < playerCount; p++)
             {
-                TriangleMesh fovBlocker = (TriangleMesh)sLeaser.sprites[p * 2 + 1];
-                FSprite screenBlocker = sLeaser.sprites[p * 2 + 2];
+                TriangleMesh fovBlocker = (TriangleMesh)sLeaser.sprites[p * 3 + 1];
+                TriangleMesh rangeBlocker = (TriangleMesh)sLeaser.sprites[p * 3 + 2];
+                FSprite screenBlocker = sLeaser.sprites[p * 3 + 3];
                 PlayerFovInfo fovInfo = playerInfo[p];
 
                 // Eye position
@@ -364,17 +400,19 @@ namespace LineOfSight
 
                 // Update FOV blocker mesh
                 Vector2 pos = Vector2.zero;
-                float levelSize = Math.Max(room.PixelWidth, room.PixelHeight);
                 for (int i = 0, len = corners.Count / 2; i < len; i++)
                 {
                     pos.Set(corners[i].x - eye.x, corners[i].y - eye.y);
                     pos.Normalize();
                     fovBlocker.vertices[i].Set(corners[i].x, corners[i].y);
-                    fovBlocker.vertices[i + len].Set(pos.x * levelSize + eye.x, pos.y * levelSize + eye.y);
+                    fovBlocker.vertices[i + len].Set(pos.x * viewRange * 10f + eye.x, pos.y * viewRange * 10f + eye.y);
                 }
                 fovBlocker.Refresh();
                 fovBlocker.x = -_lastCamPos.x;
                 fovBlocker.y = -_lastCamPos.y;
+
+                // Move the Range Blocker
+                rangeBlocker.SetPosition(eye - _lastCamPos);
 
                 // Block the screen when inside a wall
                 if (room.GetTile(room.GetTilePosition(eye)).Solid)
@@ -395,7 +433,7 @@ namespace LineOfSight
                 screenBlocker.SetPosition(camPos);
             }
 
-            FSprite finalBlocker = sLeaser.sprites[playerCount * 2 + 1];
+            FSprite finalBlocker = sLeaser.sprites[playerCount * 3 + 1];
             switch (renderMode)
             {
                 case RenderMode.Classic:

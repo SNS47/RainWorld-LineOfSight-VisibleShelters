@@ -21,7 +21,12 @@ namespace LineOfSight
 		public static Type[] blacklist = {
             typeof(LOSController),
             typeof(PhysicalObject),
-			typeof(SporeCloud),
+			typeof(WaterDrip),
+            typeof(Smoke.SmokeSystem),
+            typeof(ExplosionSpikes),
+            typeof(Explosion.ExplosionLight),
+            typeof(Explosion.ExplosionSmoke),
+            typeof(SporeCloud),
 			typeof(SlimeMoldLight),
 			typeof(Bubble),
 			typeof(CosmeticInsect),
@@ -37,7 +42,8 @@ namespace LineOfSight
         };
 
         public static Type[] whitelist = { 
-			typeof(PlayerGraphics)
+			typeof(PlayerGraphics),
+			typeof(Smoke.SteamSmoke)
 		};
 
         // FOR MULTIPLE PLAYERS:
