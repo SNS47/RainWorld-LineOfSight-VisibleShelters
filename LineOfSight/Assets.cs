@@ -62,14 +62,25 @@ namespace LineOfSight
             }
         }
 
-        private static FShader _FovBlockerStencil;
-        public static FShader FovBlockerStencil
+        private static FShader _ViewBlockerStencil;
+        public static FShader ViewBlockerStencil
         {
             get
             {
-                if (_FovBlockerStencil == null)
-                    _FovBlockerStencil = FShader.CreateShader("FovBlockerStencil", AssetBundle.LoadAsset<Shader>("FovBlockerStencil.shader"));
-                return _FovBlockerStencil;
+                if (_ViewBlockerStencil == null)
+                    _ViewBlockerStencil = FShader.CreateShader("ViewBlockerStencil", AssetBundle.LoadAsset<Shader>("ViewBlockerStencil.shader"));
+                return _ViewBlockerStencil;
+            }
+        }
+
+        private static FShader _UnblockerStencil;
+        public static FShader UnblockerStencil
+        {
+            get
+            {
+                if (_UnblockerStencil == null)
+                    _UnblockerStencil = FShader.CreateShader("UnblockerStencil", AssetBundle.LoadAsset<Shader>("UnblockerStencil.shader"));
+                return _UnblockerStencil;
             }
         }
 
@@ -81,21 +92,6 @@ namespace LineOfSight
                 if (_ScreenBlockerStencil == null)
                     _ScreenBlockerStencil = FShader.CreateShader("ScreenBlockerStencil", AssetBundle.LoadAsset<Shader>("ScreenBlockerStencil.shader"));
                 return _ScreenBlockerStencil;
-            }
-        }
-
-        private static FAtlasElement _Bayer16Dither;
-        public static FAtlasElement Bayer16Dither
-        {
-            get
-            {
-                if (_Bayer16Dither == null)
-                {
-                    Texture2D dither = AssetBundle.LoadAsset<Texture2D>("Bayer16.png");
-                    Futile.atlasManager.LoadAtlasFromTexture("LOS_Bayer16", dither, true);
-                    _Bayer16Dither = Futile.atlasManager.GetElementWithName("LOS_Bayer16");
-                }
-                return _Bayer16Dither;
             }
         }
     }

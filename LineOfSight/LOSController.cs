@@ -44,29 +44,29 @@ namespace LineOfSight
         public static void AddBlacklistedTypes(params Type[] drawableTypes)
         {
             foreach (Type drawableType in drawableTypes)
-                blacklistedTypes.Add(drawableType);
-            generatedTypeBlacklist = null;
+                if (blacklistedTypes.Add(drawableType))
+                    generatedTypeBlacklist = null;
         }
 
         public static void RemoveBlacklistedTypes(params Type[] drawableTypes)
         {
             foreach (Type drawableType in drawableTypes)
-                blacklistedTypes.Remove(drawableType);
-            generatedTypeBlacklist = null;
+                if (blacklistedTypes.Remove(drawableType))
+                    generatedTypeBlacklist = null;
         }
 
         public static void AddWhitelistedTypes(params Type[] drawableTypes)
         {
             foreach (Type drawableType in drawableTypes)
-                whitelistedTypes.Add(drawableType);
-            generatedTypeBlacklist = null;
+                if (whitelistedTypes.Add(drawableType))
+                    generatedTypeBlacklist = null;
         }
 
         public static void RemoveWhitelistedTypes(params Type[] drawableTypes)
         {
             foreach (Type drawableType in drawableTypes)
-                whitelistedTypes.Remove(drawableType);
-            generatedTypeBlacklist = null;
+                if (whitelistedTypes.Remove(drawableType))
+                    generatedTypeBlacklist = null;
         }
 
         private static void GenerateTypeBlacklist()
@@ -90,6 +90,13 @@ namespace LineOfSight
 
         //Sprites
         public bool hideAllSprites = false;
+        private struct PlayerBlockers
+        {
+            public TriangleMesh nearBlocker;
+            public TriangleMesh fovBlocker;
+            public TriangleMesh rangeBlocker;
+            public FSprite screenBlocker;
+        }
 
         //FOV calculation
         private int playerCount;
@@ -97,17 +104,22 @@ namespace LineOfSight
         {
             public Vector2? eyePos;
             public Vector2? lastEyePos;
-            public float screenblockAlpha;
-            public float lastScreenblockAlpha;
+            public Vector2? bodyPos;
+            public Vector2? lastBodyPos;
+            public float nearBlockAlpha;
+            public float lastNearBlockAlpha;
+            public float screenBlockAlpha;
+            public float lastScreenBlockAlpha;
             public PlayerFovInfo()
             {
-                eyePos = null; lastEyePos = null;
-                screenblockAlpha = 1f; lastScreenblockAlpha = 1f;
+                Clear();
             }
             public void Clear()
             {
                 eyePos = null; lastEyePos = null;
-                screenblockAlpha = 1f; lastScreenblockAlpha = 1f;
+                bodyPos = null; lastBodyPos = null;
+                screenBlockAlpha = 1f; lastScreenBlockAlpha = 1f;
+                nearBlockAlpha = 0f; lastNearBlockAlpha = 0f;
             }
         }
         private PlayerFovInfo[] playerInfo;
@@ -173,6 +185,11 @@ namespace LineOfSight
             playerInfo = new PlayerFovInfo[playerCount];
             for (int i = 0; i < playerCount; i++)
                 playerInfo[i] = new PlayerFovInfo();
+            
+            if (playerCount > 1)
+                RemoveWhitelistedTypes(typeof(PlayerGraphics));
+            else
+                AddWhitelistedTypes(typeof(PlayerGraphics));
         }
 
         public override void InitiateSprites(RoomCamera.SpriteLeaser sLeaser, RoomCamera rCam)
@@ -182,7 +199,7 @@ namespace LineOfSight
             while (state != MappingState.Done)
                 UpdateMapper(int.MaxValue);
 
-            sLeaser.sprites = new FSprite[playerCount * 3 + 2];
+            sLeaser.sprites = new FSprite[playerCount * 4 + 2];
 
             FSprite preBlocker = new FSprite("pixel")
             {
@@ -192,7 +209,7 @@ namespace LineOfSight
             preBlocker.shader = Assets.PreBlockerStencil;
             sLeaser.sprites[0] = preBlocker;
 
-            // Generate tris
+            // Generate blocker meshes
             for (int p =  0; p < playerCount; p++)
             {
                 // Block outside of FoV
@@ -205,31 +222,23 @@ namespace LineOfSight
                 }
 
                 TriangleMesh fovBlocker = new TriangleMesh("Futile_White", fovTris, false, true);
-                fovBlocker.shader = Assets.FovBlockerStencil;
+                fovBlocker.shader = Assets.ViewBlockerStencil;
                 corners.CopyTo(fovBlocker.vertices);
                 fovBlocker.Refresh();
-                sLeaser.sprites[p * 3 + 1] = fovBlocker;
+                sLeaser.sprites[p * 4 + 1] = fovBlocker;
 
-                // Block outside of range
-                int rCount = 120;
+                // Near unblocker
+                TriangleMesh nearBlocker = GenerateCircularBlocker(Assets.UnblockerStencil, true, 30, 20f, 40f);
+                for (int v = 30; v < 60; v++)
+                    nearBlocker.verticeColors[v] = Color.clear;
+                sLeaser.sprites[p * 4 + 2] = nearBlocker;
 
-                TriangleMesh.Triangle[] rangeTris = new TriangleMesh.Triangle[rCount * 2];
-                for (int v1 = 0; v1 < rCount * 2; v1++)
-                {
-                    int v2 = (v1 + 1) % (rCount * 2);
-                    int v3 = (v1 + 2) % (rCount * 2);
-                    rangeTris[v1] = new TriangleMesh.Triangle(v1, v2, v3);
-                }
-
-                TriangleMesh rangeBlocker = new TriangleMesh("Futile_White", rangeTris, false, true);
-                for (int i = 0; i < rCount; i++)
-                {
-                    rangeBlocker.vertices[i * 2] = Custom.DegToVec(i * 360f / rCount) * viewRange;
-                    rangeBlocker.vertices[i * 2 + 1] = Custom.DegToVec(i * 360f / rCount) * 50000f; //reallly fucking far. should never be on screen.
-                }
-                rangeBlocker.shader = Assets.FovBlockerStencil;
-                rangeBlocker.Refresh();
-                sLeaser.sprites[p * 3 + 2] = rangeBlocker;
+                // Range blocker
+                TriangleMesh rangeBlocker = GenerateCircularBlocker(Assets.ViewBlockerStencil, true, 120, viewRange * 0.6f, viewRange, 50000f);
+                for (int v = 0; v < 120; v++)
+                    rangeBlocker.verticeColors[v] = Color.clear;
+                rangeBlocker.verticeColors[360] = Color.clear;
+                sLeaser.sprites[p * 4 + 3] = rangeBlocker;
 
                 // Full screen blocker
                 FSprite screenBlocker = new FSprite("pixel")
@@ -237,9 +246,8 @@ namespace LineOfSight
                     anchorX = 0f,
                     anchorY = 0f
                 };
-                screenBlocker.element = Assets.Bayer16Dither;
                 screenBlocker.shader = Assets.ScreenBlockerStencil;
-                sLeaser.sprites[p * 3 + 3] = screenBlocker;
+                sLeaser.sprites[p * 4 + 4] = screenBlocker;
             }
 
             FSprite finalBlocker = new FSprite("pixel")
@@ -248,14 +256,55 @@ namespace LineOfSight
                 anchorY = 0f
             };
             finalBlocker.shader = fovShader;
-            sLeaser.sprites[playerCount * 3 + 1] = finalBlocker;
+            sLeaser.sprites[sLeaser.sprites.Length - 1] = finalBlocker;
 
             AddToContainer(sLeaser, rCam, null);
         }
 
+        private TriangleMesh GenerateCircularBlocker(FShader shader, bool filled, int points, params float[] ranges)
+        {
+            Array.Sort(ranges);
+            int rings = ranges.Length;
+            int triCount = points * (rings - 1) * 2;
+            triCount = filled ? triCount + points : triCount;
+
+            TriangleMesh.Triangle[] tris = new TriangleMesh.Triangle[triCount];
+            for (int r = 0; r < rings - 1; r++)
+                for (int p = 0; p < points; p++)
+                {
+                    int v1 = r * points + p;
+                    int v2 = r * points + (p + 1) % points;
+                    int v3 = v1 + points;
+                    int v4 = v2 + points;
+                    tris[(r * points + p) * 2] = new TriangleMesh.Triangle(v1, v2, v3);
+                    tris[(r * points + p) * 2 + 1] = new TriangleMesh.Triangle(v2, v3, v4);
+                }
+
+            if (filled)
+                for (int p = 0; p < points; p++)
+                {
+                    int v1 = p;
+                    int v2 = (p + 1) % points;
+                    int v3 = rings * points;
+                    tris[points * (rings - 1) * 2 + p] = new TriangleMesh.Triangle(v1, v2, v3);
+                }
+
+            TriangleMesh circleBlocker = new TriangleMesh("Futile_White", tris, true, true);
+            for (int r = 0; r < rings; r++)
+                for (int p = 0; p < points; p++)
+                    circleBlocker.vertices[r * points + p] = Custom.DegToVec(p * 360f / points) * ranges[r];
+            if (filled)
+                circleBlocker.vertices[rings * points] = new Vector2(0f, 0f);
+
+            circleBlocker.shader = shader;
+            circleBlocker.Refresh();
+            Debug.Log("Generated circle mesh with " + circleBlocker.vertices.Length + " vertices and " + tris.Length + " triangles.");
+            return circleBlocker;
+        }
+
         public override void ApplyPalette(RoomCamera.SpriteLeaser sLeaser, RoomCamera rCam, RoomPalette palette)
         {
-            FSprite finalBlocker = sLeaser.sprites[playerCount * 3 + 1];
+            FSprite finalBlocker = sLeaser.sprites[sLeaser.sprites.Length - 1];
             if (renderMode == RenderMode.Fast)
                 finalBlocker.color = new Color(1f - visibility, 0, 0, 1f);
             else
@@ -299,26 +348,36 @@ namespace LineOfSight
                 PlayerFovInfo fovInfo = playerInfo[p];
 
                 fovInfo.lastEyePos = fovInfo.eyePos.HasValue ? fovInfo.eyePos.Value : null;
-                fovInfo.lastScreenblockAlpha = fovInfo.screenblockAlpha;
+                fovInfo.lastBodyPos = fovInfo.bodyPos.HasValue ? fovInfo.bodyPos.Value : null;
+                fovInfo.lastScreenBlockAlpha = fovInfo.screenBlockAlpha;
+                fovInfo.lastNearBlockAlpha = fovInfo.nearBlockAlpha;
 
                 // Player null or not in room
                 if (ply == null || (ply.room != room && plyVessel?.room.realizedRoom != room))
                 {
-                    if (fovInfo.screenblockAlpha == 1f || !fovInfo.eyePos.HasValue)
+                    if (fovInfo.screenBlockAlpha == 1f && fovInfo.nearBlockAlpha == 0f || !fovInfo.eyePos.HasValue)
                         fovInfo.Clear();
                     else
-                        fovInfo.screenblockAlpha = Mathf.Clamp01(fovInfo.screenblockAlpha + 0.1f);
+                    {
+                        fovInfo.screenBlockAlpha = Mathf.Clamp01(fovInfo.screenBlockAlpha + 0.05f);
+                        fovInfo.nearBlockAlpha = Mathf.Clamp01(fovInfo.nearBlockAlpha - 0.05f);
+                    }
                     continue;
                 }
 
                 // Update eye position and screenblock alpha
-                BodyChunk headChunk = room.game.Players[p].realizedCreature?.bodyChunks[0];
+                BodyChunk headChunk = ply.bodyChunks[0];
                 if (headChunk != null)
                     fovInfo.eyePos = headChunk.pos;
+
+                BodyChunk TorsoChunk = ply.bodyChunks[1];
+                if (headChunk != null)
+                    fovInfo.bodyPos = TorsoChunk.pos;
 
                 if (plyVessel != null)
                 {
                     fovInfo.eyePos = Vector2.Lerp(plyVessel.lastPos.ToVector2(), plyVessel.pos.ToVector2(), (room.game.updateShortCut + 1) / 3f) * 20f + new Vector2(10f, 10f);
+                    fovInfo.bodyPos = fovInfo.eyePos.Value;
                 }
 
                 if (!fovInfo.eyePos.HasValue)
@@ -327,18 +386,22 @@ namespace LineOfSight
                 bool justEntered = (!fovInfo.lastEyePos.HasValue) ? true : false;
 
                 // Test for blindness
-                if (ply.Consious && !ply.Sleeping && ply.sleepCurlUp != 1f)
-                    fovInfo.screenblockAlpha = justEntered ? 0f : Mathf.Clamp01(fovInfo.screenblockAlpha - 0.1f);
-                else
-                    fovInfo.screenblockAlpha = justEntered ? 1f : Mathf.Clamp01(fovInfo.screenblockAlpha + 0.1f);
-
-                if (plyVessel != null && plyVessel.room.realizedRoom == null) // room not realized???
+                if (!ply.Consious)
                 {
-                    fovInfo.screenblockAlpha = 1f;
-                    fovInfo.lastScreenblockAlpha = 1f;
+                    fovInfo.screenBlockAlpha = justEntered ? 1f : Mathf.Clamp01(fovInfo.screenBlockAlpha + 0.1f);
+                    fovInfo.nearBlockAlpha = justEntered ? 0f : Mathf.Clamp01(fovInfo.nearBlockAlpha - 0.1f);
+                }
+                else
+                {
+                    fovInfo.nearBlockAlpha = justEntered ? 1f : Mathf.Clamp01(fovInfo.nearBlockAlpha + 0.1f);
+                    if (ply.Sleeping || ply.sleepCurlUp == 1f)
+                        fovInfo.screenBlockAlpha = justEntered ? 1f : Mathf.Clamp01(fovInfo.screenBlockAlpha + 0.05f);
+                    else
+                        fovInfo.screenBlockAlpha = justEntered ? 0f : Mathf.Clamp01(fovInfo.screenBlockAlpha - 0.1f);
                 }
 
                 fovInfo.lastEyePos = fovInfo.lastEyePos.HasValue ? fovInfo.lastEyePos.Value : (fovInfo.eyePos.HasValue ? fovInfo.eyePos.Value : null);
+                fovInfo.lastBodyPos = fovInfo.lastBodyPos.HasValue ? fovInfo.lastBodyPos.Value : (fovInfo.bodyPos.HasValue ? fovInfo.bodyPos.Value : null);
             }
             // Don't display in arena while multiple players are present
             // This doesn't happen in story so that Monkland still works
@@ -384,15 +447,18 @@ namespace LineOfSight
             //update blockers for each player
             for (int p = 0; p < playerCount; p++)
             {
-                TriangleMesh fovBlocker = (TriangleMesh)sLeaser.sprites[p * 3 + 1];
-                TriangleMesh rangeBlocker = (TriangleMesh)sLeaser.sprites[p * 3 + 2];
-                FSprite screenBlocker = sLeaser.sprites[p * 3 + 3];
+                TriangleMesh fovBlocker = sLeaser.sprites[p * 4 + 1] as TriangleMesh;
+                TriangleMesh nearBlocker = sLeaser.sprites[p * 4 + 2] as TriangleMesh;
+                TriangleMesh rangeBlocker = (TriangleMesh)sLeaser.sprites[p * 4 + 3];
+                FSprite screenBlocker = sLeaser.sprites[p * 4 + 4];
                 PlayerFovInfo fovInfo = playerInfo[p];
 
                 // Eye position
                 if (!fovInfo.eyePos.HasValue)
                 {
                     fovBlocker.isVisible = false;
+                    nearBlocker.isVisible = false;
+                    rangeBlocker.isVisible = false;
                     screenBlocker.isVisible = false;
                     continue;
                 }
@@ -411,29 +477,40 @@ namespace LineOfSight
                 fovBlocker.x = -_lastCamPos.x;
                 fovBlocker.y = -_lastCamPos.y;
 
-                // Move the Range Blocker
-                rangeBlocker.SetPosition(eye - _lastCamPos);
-
                 // Block the screen when inside a wall
                 if (room.GetTile(room.GetTilePosition(eye)).Solid)
                 {
-                    fovInfo.lastScreenblockAlpha = 1f;
-                    fovInfo.screenblockAlpha = 1f;
+                    fovInfo.lastScreenBlockAlpha = 1f;
+                    fovInfo.screenBlockAlpha = 1f;
+                    fovBlocker.isVisible = false;
                 }
 
+                float screenBlockAplha = Mathf.Lerp(fovInfo.lastScreenBlockAlpha, fovInfo.screenBlockAlpha, timeStacker);
+                float nearBlockAlpha = Mathf.Lerp(fovInfo.lastNearBlockAlpha, fovInfo.nearBlockAlpha, timeStacker);
+                float nearBlockFade = 1 - screenBlockAplha;
+
+                // Update Near and Far Blocker
+                Vector2 center = Vector2.Lerp(Vector2.Lerp(fovInfo.lastBodyPos.Value, fovInfo.bodyPos.Value, timeStacker), eye, 0.48f);
+                for (int v = 0; v < 30; v++)
+                    nearBlocker.verticeColors[v].a = nearBlockAlpha;
+                nearBlocker.verticeColors[60].a = nearBlockAlpha;
+                for (int v = 30; v < 60; v++)
+                    nearBlocker.verticeColors[v].a = nearBlockFade;
+                nearBlocker.SetPosition(center - _lastCamPos);
+
+                for (int v = 0; v < 120; v++)
+                    rangeBlocker.verticeColors[v].a = screenBlockAplha;
+                rangeBlocker.verticeColors[360].a = screenBlockAplha;
+                rangeBlocker.SetPosition(eye - _lastCamPos);
+
                 // Move the screenblock
-                screenBlocker.alpha = Mathf.Lerp(fovInfo.lastScreenblockAlpha, fovInfo.screenblockAlpha, timeStacker);
+                screenBlocker.alpha = Mathf.Lerp(fovInfo.lastScreenBlockAlpha, fovInfo.screenBlockAlpha, timeStacker);
                 screenBlocker.width = Futile.screen.renderTexture.width;
                 screenBlocker.height = Futile.screen.renderTexture.height;
-                float uvX = screenBlocker.width / 16;
-                float uvY = screenBlocker.height / 16;
-                screenBlocker.element.uvTopLeft.Set(0, uvY);
-                screenBlocker.element.uvTopRight.Set(uvX, uvY);
-                screenBlocker.element.uvBottomRight.Set(uvX, 0);
                 screenBlocker.SetPosition(camPos);
             }
 
-            FSprite finalBlocker = sLeaser.sprites[playerCount * 3 + 1];
+            FSprite finalBlocker = sLeaser.sprites[sLeaser.sprites.Length - 1];
             switch (renderMode)
             {
                 case RenderMode.Classic:
@@ -474,6 +551,7 @@ namespace LineOfSight
             {
                 if (generatedTypeBlacklist.Contains(sLeaser.drawableObject.GetType()) //if drawable is a type we want to hide
                     || ( typeof(LightSource).IsInstanceOfType(sLeaser.drawableObject) && generatedTypeBlacklist.Contains(((LightSource)sLeaser.drawableObject).tiedToObject?.GetType())) //if drawable is a light and attached to a type we want to hide
+                    //|| typeof(PlayerGraphics).IsInstanceOfType(sLeaser.drawableObject) && !(sLeaser.drawableObject as PlayerGraphics).player.Consious && playerCount > 1 //if player is unconsious in multiplayer
                     ) 
                     foreach (FSprite sprite in sLeaser.sprites)
                         DisableNode(sprite);

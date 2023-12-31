@@ -7,6 +7,7 @@ using UnityEngine;
 using LineOfSight;
 using BepInEx.Logging;
 using System.Runtime.CompilerServices;
+using JollyCoop;
 
 [assembly: SecurityPermission(SecurityAction.RequestMinimum, SkipVerification = true)]
 
@@ -42,18 +43,8 @@ namespace LineOfSight
         };
 
         public static Type[] whitelist = { 
-			typeof(PlayerGraphics),
 			typeof(Smoke.SteamSmoke)
 		};
-
-        // FOR MULTIPLE PLAYERS:
-        // Same mesh generation process repeated for all players
-        // The shader process goes like this:
-        // 1 - Draw LOS mesh, set bit 1 of the stencil mask
-        // 2 - Draw fullscreen quad, if bit 1 is not set then set bit 0
-        // 3 - Draw fullscreen quad, unset bit 1
-        // 4 - Repeat steps 1-3 for each player
-        // 5 - Draw fullscreen quad, if bit 0 is set then draw LOS blocker
 
         public void OnEnable()
 		{
@@ -118,7 +109,6 @@ namespace LineOfSight
             {
                 LOSController owner;
                 self.AddObject(owner = new LOSController(self));
-                self.AddObject(new ShortcutDisplay(owner));
             }
             orig(self);
         }
