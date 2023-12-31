@@ -40,9 +40,11 @@ namespace LineOfSight
             typeof(DaddyCorruption),
             typeof(MouseSpark),
             typeof(CentipedeShell),
+			typeof(Spear.Umbilical)
         };
 
-        public static Type[] whitelist = { 
+		public static Type[] whitelist = {
+			typeof(PlayerGraphics),
 			typeof(Smoke.SteamSmoke)
 		};
 

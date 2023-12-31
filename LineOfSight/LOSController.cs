@@ -30,6 +30,9 @@ namespace LineOfSight
         public static float brightness;
         public static float tileSize;
         public static float viewRange;
+        public static int allowVisionUnconsciousSingleplayer;
+        public static int allowVisionUnconsciousMultiplayer;
+        public int allowVisionWhileUnconscious;
 
         //Hide sprites in fancy mode
         private static HashSet<Type> blacklistedTypes = new HashSet<Type>();
@@ -90,13 +93,7 @@ namespace LineOfSight
 
         //Sprites
         public bool hideAllSprites = false;
-        private struct PlayerBlockers
-        {
-            public TriangleMesh nearBlocker;
-            public TriangleMesh fovBlocker;
-            public TriangleMesh rangeBlocker;
-            public FSprite screenBlocker;
-        }
+        public IntVector2 resolution;
 
         //FOV calculation
         private int playerCount;
@@ -145,6 +142,8 @@ namespace LineOfSight
             _y = 0;
             tiles = room.Tiles;
 
+            resolution = new IntVector2(Futile.screen.renderTexture.width, Futile.screen.renderTexture.height);
+
             //Initialize fovShader
             if (fovShader == null)
                 switch (renderMode)
@@ -166,7 +165,7 @@ namespace LineOfSight
             if(renderMode == RenderMode.Fancy)
             {
                 if (renderTexture != null
-                    && (renderTexture.width != Futile.screen.renderTexture.width || renderTexture.height != Futile.screen.renderTexture.height))
+                    && (renderTexture.width !=  resolution.x || renderTexture.height != resolution.y))
                 {
                     renderTexture = null;
                     Futile.atlasManager.ActuallyUnloadAtlasOrImage("LOS_RenderTexture");
@@ -185,11 +184,10 @@ namespace LineOfSight
             playerInfo = new PlayerFovInfo[playerCount];
             for (int i = 0; i < playerCount; i++)
                 playerInfo[i] = new PlayerFovInfo();
-            
-            if (playerCount > 1)
-                RemoveWhitelistedTypes(typeof(PlayerGraphics));
-            else
-                AddWhitelistedTypes(typeof(PlayerGraphics));
+
+            allowVisionWhileUnconscious = (playerCount > 1) ? allowVisionUnconsciousMultiplayer : allowVisionUnconsciousSingleplayer;
+            if (allowVisionWhileUnconscious == 1 && renderMode != RenderMode.Fancy)
+                allowVisionWhileUnconscious = 2;
         }
 
         public override void InitiateSprites(RoomCamera.SpriteLeaser sLeaser, RoomCamera rCam)
@@ -233,12 +231,12 @@ namespace LineOfSight
                     nearBlocker.verticeColors[v] = Color.clear;
                 sLeaser.sprites[p * 4 + 2] = nearBlocker;
 
-                // Range blocker
-                TriangleMesh rangeBlocker = GenerateCircularBlocker(Assets.ViewBlockerStencil, true, 120, viewRange * 0.6f, viewRange, 50000f);
+                // Far blocker
+                TriangleMesh farBlocker = GenerateCircularBlocker(Assets.ViewBlockerStencil, true, 120, viewRange * 0.6f, viewRange, 50000f);
                 for (int v = 0; v < 120; v++)
-                    rangeBlocker.verticeColors[v] = Color.clear;
-                rangeBlocker.verticeColors[360] = Color.clear;
-                sLeaser.sprites[p * 4 + 3] = rangeBlocker;
+                    farBlocker.verticeColors[v] = Color.clear;
+                farBlocker.verticeColors[360] = Color.clear;
+                sLeaser.sprites[p * 4 + 3] = farBlocker;
 
                 // Full screen blocker
                 FSprite screenBlocker = new FSprite("pixel")
@@ -247,6 +245,8 @@ namespace LineOfSight
                     anchorY = 0f
                 };
                 screenBlocker.shader = Assets.ScreenBlockerStencil;
+                screenBlocker.width = resolution.x;
+                screenBlocker.height = resolution.y;
                 sLeaser.sprites[p * 4 + 4] = screenBlocker;
             }
 
@@ -344,7 +344,8 @@ namespace LineOfSight
             for (int p = 0; p < playerCount; p++)
             {
                 Player ply = room.game.Players[p].realizedCreature as Player;
-                ShortcutHandler.ShortCutVessel plyVessel = room.game.shortcuts.transportVessels.Find(x => x.creature == ply);
+                Creature grabbedBy = ply.grabbedBy.Count > 0 ? ply.grabbedBy[0].grabber : null;
+                ShortcutHandler.ShortCutVessel plyVessel = room.game.shortcuts.transportVessels.Find(x => x.creature == ply || x.creature == grabbedBy);
                 PlayerFovInfo fovInfo = playerInfo[p];
 
                 fovInfo.lastEyePos = fovInfo.eyePos.HasValue ? fovInfo.eyePos.Value : null;
@@ -386,18 +387,36 @@ namespace LineOfSight
                 bool justEntered = (!fovInfo.lastEyePos.HasValue) ? true : false;
 
                 // Test for blindness
-                if (!ply.Consious)
+                if (ply.Consious)
                 {
-                    fovInfo.screenBlockAlpha = justEntered ? 1f : Mathf.Clamp01(fovInfo.screenBlockAlpha + 0.1f);
-                    fovInfo.nearBlockAlpha = justEntered ? 0f : Mathf.Clamp01(fovInfo.nearBlockAlpha - 0.1f);
-                }
-                else
-                {
-                    fovInfo.nearBlockAlpha = justEntered ? 1f : Mathf.Clamp01(fovInfo.nearBlockAlpha + 0.1f);
-                    if (ply.Sleeping || ply.sleepCurlUp == 1f)
-                        fovInfo.screenBlockAlpha = justEntered ? 1f : Mathf.Clamp01(fovInfo.screenBlockAlpha + 0.05f);
-                    else
+                    if ((ply.Sleeping || ply.sleepCurlUp == 1f)) // sleeping
+                    {
+                        if (allowVisionWhileUnconscious != 3)
+                            fovInfo.screenBlockAlpha = justEntered ? 1f : Mathf.Clamp01(fovInfo.screenBlockAlpha + 0.05f);
+                        else
+                            fovInfo.screenBlockAlpha = justEntered ? 0f : Mathf.Clamp01(fovInfo.screenBlockAlpha - 0.1f);
+                            
+                        if (allowVisionWhileUnconscious == 1)
+                            fovInfo.nearBlockAlpha = justEntered ? 0f : Mathf.Clamp01(fovInfo.nearBlockAlpha - 0.05f);
+                        else
+                            fovInfo.nearBlockAlpha = justEntered ? 1f : Mathf.Clamp01(fovInfo.nearBlockAlpha + 0.1f);
+                    }
+                    else // conscious and awake
+                    {
                         fovInfo.screenBlockAlpha = justEntered ? 0f : Mathf.Clamp01(fovInfo.screenBlockAlpha - 0.1f);
+                        fovInfo.nearBlockAlpha = justEntered ? 1f : Mathf.Clamp01(fovInfo.nearBlockAlpha + 0.1f);
+                    }
+                }
+                else // unconscious
+                {
+                    if (allowVisionWhileUnconscious == 3) //far vision allowed when unconscious
+                        fovInfo.screenBlockAlpha = justEntered ? 0f : Mathf.Clamp01(fovInfo.screenBlockAlpha - 0.1f);
+                    else
+                        fovInfo.screenBlockAlpha = justEntered ? 1f : Mathf.Clamp01(fovInfo.screenBlockAlpha + 0.1f);
+                    if (allowVisionWhileUnconscious >= 2 || allowVisionWhileUnconscious == 1 && plyVessel != null) //near vision allowed when unconscious
+                        fovInfo.nearBlockAlpha = justEntered ? 1f : Mathf.Clamp01(fovInfo.nearBlockAlpha + 0.1f);
+                    else
+                        fovInfo.nearBlockAlpha = justEntered ? 0f : Mathf.Clamp01(fovInfo.nearBlockAlpha - 0.1f);
                 }
 
                 fovInfo.lastEyePos = fovInfo.lastEyePos.HasValue ? fovInfo.lastEyePos.Value : (fovInfo.eyePos.HasValue ? fovInfo.eyePos.Value : null);
@@ -440,8 +459,8 @@ namespace LineOfSight
             }
 
             FSprite preBlocker = sLeaser.sprites[0];
-            preBlocker.width = Futile.screen.renderTexture.width;
-            preBlocker.height = Futile.screen.renderTexture.height;
+            preBlocker.width = resolution.x;
+            preBlocker.height = resolution.y;
             preBlocker.SetPosition(camPos);
 
             //update blockers for each player
@@ -449,20 +468,22 @@ namespace LineOfSight
             {
                 TriangleMesh fovBlocker = sLeaser.sprites[p * 4 + 1] as TriangleMesh;
                 TriangleMesh nearBlocker = sLeaser.sprites[p * 4 + 2] as TriangleMesh;
-                TriangleMesh rangeBlocker = (TriangleMesh)sLeaser.sprites[p * 4 + 3];
+                TriangleMesh farBlocker = (TriangleMesh)sLeaser.sprites[p * 4 + 3];
                 FSprite screenBlocker = sLeaser.sprites[p * 4 + 4];
                 PlayerFovInfo fovInfo = playerInfo[p];
 
                 // Eye position
-                if (!fovInfo.eyePos.HasValue)
+                Vector2 eye = Vector2.positiveInfinity;
+                if (fovInfo.eyePos.HasValue)
+                    eye = Vector2.Lerp(fovInfo.lastEyePos.Value, fovInfo.eyePos.Value, timeStacker);
+                if (Vector2.Distance(eye, _lastCamPos + resolution.ToVector2() / 2f) > 10000f) // skip render if too far away or eye position has no value
                 {
                     fovBlocker.isVisible = false;
                     nearBlocker.isVisible = false;
-                    rangeBlocker.isVisible = false;
+                    farBlocker.isVisible = false;
                     screenBlocker.isVisible = false;
                     continue;
                 }
-                Vector2 eye = Vector2.Lerp(fovInfo.lastEyePos.Value, fovInfo.eyePos.Value, timeStacker);
 
                 // Update FOV blocker mesh
                 Vector2 pos = Vector2.zero;
@@ -499,14 +520,12 @@ namespace LineOfSight
                 nearBlocker.SetPosition(center - _lastCamPos);
 
                 for (int v = 0; v < 120; v++)
-                    rangeBlocker.verticeColors[v].a = screenBlockAplha;
-                rangeBlocker.verticeColors[360].a = screenBlockAplha;
-                rangeBlocker.SetPosition(eye - _lastCamPos);
+                    farBlocker.verticeColors[v].a = screenBlockAplha;
+                farBlocker.verticeColors[360].a = screenBlockAplha;
+                farBlocker.SetPosition(eye - _lastCamPos);
 
                 // Move the screenblock
                 screenBlocker.alpha = Mathf.Lerp(fovInfo.lastScreenBlockAlpha, fovInfo.screenBlockAlpha, timeStacker);
-                screenBlocker.width = Futile.screen.renderTexture.width;
-                screenBlocker.height = Futile.screen.renderTexture.height;
                 screenBlocker.SetPosition(camPos);
             }
 
@@ -514,8 +533,8 @@ namespace LineOfSight
             switch (renderMode)
             {
                 case RenderMode.Classic:
-                    finalBlocker.width = Futile.screen.renderTexture.width;
-                    finalBlocker.height = Futile.screen.renderTexture.height;
+                    finalBlocker.width = resolution.x;
+                    finalBlocker.height = resolution.y;
                     finalBlocker.SetPosition(camPos);
                     break;
                 case RenderMode.Fast:
@@ -551,7 +570,7 @@ namespace LineOfSight
             {
                 if (generatedTypeBlacklist.Contains(sLeaser.drawableObject.GetType()) //if drawable is a type we want to hide
                     || ( typeof(LightSource).IsInstanceOfType(sLeaser.drawableObject) && generatedTypeBlacklist.Contains(((LightSource)sLeaser.drawableObject).tiedToObject?.GetType())) //if drawable is a light and attached to a type we want to hide
-                    //|| typeof(PlayerGraphics).IsInstanceOfType(sLeaser.drawableObject) && !(sLeaser.drawableObject as PlayerGraphics).player.Consious && playerCount > 1 //if player is unconsious in multiplayer
+                    || ( typeof(PlayerGraphics).IsInstanceOfType(sLeaser.drawableObject) && ( (sLeaser.drawableObject as PlayerGraphics).player.isSlugpup ? false : allowVisionWhileUnconscious == 0)) //if player and a slugpup or vision while unconscious is none
                     ) 
                     foreach (FSprite sprite in sLeaser.sprites)
                         DisableNode(sprite);
