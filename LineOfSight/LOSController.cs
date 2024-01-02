@@ -344,8 +344,9 @@ namespace LineOfSight
             for (int p = 0; p < playerCount; p++)
             {
                 Player ply = room.game.Players[p].realizedCreature as Player;
-                Creature grabbedBy = ply.grabbedBy.Count > 0 ? ply.grabbedBy[0].grabber : null;
-                ShortcutHandler.ShortCutVessel plyVessel = room.game.shortcuts.transportVessels.Find(x => x.creature == ply || x.creature == grabbedBy);
+                //Creature grabbedBy = ply.grabbedBy.Count > 0 ? ply.grabbedBy[0].grabber : null;
+                //ShortcutHandler.ShortCutVessel plyVessel = room.game.shortcuts.transportVessels.Find(x => x.creature == ply || x.creature == grabbedBy);
+                ShortcutHandler.ShortCutVessel plyVessel = room.game.shortcuts.transportVessels.Find(x => x.creature == ply);
                 PlayerFovInfo fovInfo = playerInfo[p];
 
                 fovInfo.lastEyePos = fovInfo.eyePos.HasValue ? fovInfo.eyePos.Value : null;
