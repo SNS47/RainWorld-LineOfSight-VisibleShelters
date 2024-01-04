@@ -13,17 +13,16 @@ using JollyCoop;
 
 namespace LineOfSight
 {
-    [BepInPlugin("LineOfSight", "Line Of Sight", "1.3.0")] // (GUID, mod name, mod version)
+    [BepInPlugin("LineOfSight", "Line Of Sight", "3.1.2")] // (GUID, mod name, mod version)
 	public class LineOfSightMod : BaseUnityPlugin
 	{
 		private OptionsMenu optionsMenuInstance;
 		private bool initialized = false;
 
 		public static Type[] blacklist = {
-            typeof(LOSController),
             typeof(PhysicalObject),
 			typeof(WaterDrip),
-            typeof(Smoke.SmokeSystem),
+            typeof(Smoke.SmokeSystem.SmokeSystemParticle),
             typeof(ExplosionSpikes),
             typeof(Explosion.ExplosionLight),
             typeof(Explosion.ExplosionSmoke),
@@ -45,7 +44,7 @@ namespace LineOfSight
 
 		public static Type[] whitelist = {
 			typeof(PlayerGraphics),
-			typeof(Smoke.SteamSmoke)
+			typeof(Smoke.SteamSmoke.SteamParticle)
 		};
 
         public void OnEnable()
