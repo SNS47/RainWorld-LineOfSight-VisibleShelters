@@ -6,7 +6,7 @@ using UnityEngine.SceneManagement;
 
 namespace LineOfSight
 {
-    class OptionsMenu : OptionInterface
+    class LineOfSightRemixMenu : OptionInterface
     {
         //render settings
         public readonly Configurable<int> renderMode;
@@ -32,7 +32,7 @@ namespace LineOfSight
         private OpRadioButtonGroup renderModeSelect;
         private OpSlider visibilitySlider;
 
-        public OptionsMenu(LineOfSightMod plugin)
+        public LineOfSightRemixMenu(LineOfSightMod plugin)
         {
             renderMode = this.config.Bind<int>("LineOfSight_RenderMode", 2);
             visibility = this.config.Bind<int>("LineOfSight_Visibility", 80);
@@ -50,8 +50,8 @@ namespace LineOfSight
             showWormGrass = this.config.Bind<bool>("LineOfSight_ShowWormGrass", false);
             showMonsterKelp = this.config.Bind<bool>("LineOfSight_ShowMonsterKep", false);
 
-            On.OptionInterface._LoadConfigFile += OnLoad;
-            On.OptionInterface._SaveConfigFile += OnSave;
+            UpdateConfigs();
+            typeof(OptionInterface).GetEvent("OnConfigChanged").GetAddMethod().Invoke(this, new object[] { (OnEventHandler)UpdateConfigs });
             typeof(OptionInterface).GetEvent("OnUnload").GetAddMethod().Invoke(this, new object[] { (OnEventHandler)Unload });
         }
 
@@ -177,21 +177,6 @@ namespace LineOfSight
             }
         }
 
-        private void OnLoad(On.OptionInterface.orig__LoadConfigFile orig, OptionInterface self)
-        {
-            orig(self);
-            if (self == this)
-                UpdateConfigs();
-        }
-
-        private void OnSave(On.OptionInterface.orig__SaveConfigFile orig, OptionInterface self)
-        {
-            orig(self);
-            if (self == this)
-                UpdateConfigs();
-        }
-
-        //I don't like how long it is to type Options.tileSize.Value.
         //called only when configs are loaded or changed.
         public void UpdateConfigs()
         {

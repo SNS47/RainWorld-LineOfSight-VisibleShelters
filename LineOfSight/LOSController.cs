@@ -343,7 +343,7 @@ namespace LineOfSight
 
             circleBlocker.shader = shader;
             circleBlocker.Refresh();
-            Debug.Log("Generated circle mesh with " + circleBlocker.vertices.Length + " vertices and " + tris.Length + " triangles.");
+            //Debug.Log("Generated circle mesh with " + circleBlocker.vertices.Length + " vertices and " + tris.Length + " triangles.");
             return circleBlocker;
         }
 
@@ -612,14 +612,9 @@ namespace LineOfSight
 
             //hide blacklisted Idrawable types
             foreach (RoomCamera.SpriteLeaser sLeaser in rCam.spriteLeasers)
-            {
-                if (generatedTypeBlacklist.Contains(sLeaser.drawableObject.GetType()) //if drawable is a type we want to hide
-                    || ( typeof(LightSource).IsInstanceOfType(sLeaser.drawableObject) && generatedTypeBlacklist.Contains(((LightSource)sLeaser.drawableObject).tiedToObject?.GetType())) //if drawable is a light and attached to a type we want to hide
-                    || ( typeof(PlayerGraphics).IsInstanceOfType(sLeaser.drawableObject) && ( (sLeaser.drawableObject as PlayerGraphics).player.isSlugpup ? false : allowVisionWhileUnconscious == 0)) //if player and a slugpup or vision while unconscious is none
-                    ) 
+                if (ShouldHideDrawable(sLeaser.drawableObject))
                     foreach (FSprite sprite in sLeaser.sprites)
                         DisableNode(sprite);
-            }
 
             //temporate code to hide shortcut sprites
             shortcutColors.Clear();
@@ -634,6 +629,23 @@ namespace LineOfSight
                 DisableNode(node);
             foreach (FNode node in rCam.ReturnFContainer("HUD2")._childNodes)
                 DisableNode(node);
+        }
+
+        private bool ShouldHideDrawable(object drawable)
+        {
+            if (typeof(LightSource).IsInstanceOfType(drawable) && (drawable as LightSource).tiedToObject != null) // is a light source attached to something
+            {
+                drawable = (drawable as LightSource).tiedToObject;
+                if (typeof(PhysicalObject).IsInstanceOfType(drawable) && (drawable as PhysicalObject).graphicsModule != null) // the attatched object has a graphics module
+                    drawable = (drawable as PhysicalObject).graphicsModule;
+            }
+
+            if (generatedTypeBlacklist.Contains(drawable.GetType())) //if drawable is a type we want to hide
+                return true;
+            if ((typeof(PlayerGraphics).IsInstanceOfType(drawable) && ((drawable as PlayerGraphics).player.isSlugpup ? false : allowVisionWhileUnconscious == 0))) //if player and a slugpup or vision while unconscious is none)
+                return true;
+            
+            return false;
         }
 
         private void DisableNode(FNode node)

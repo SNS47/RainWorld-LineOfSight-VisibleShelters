@@ -13,12 +13,9 @@ using JollyCoop;
 
 namespace LineOfSight
 {
-    [BepInPlugin("LineOfSight", "Line Of Sight", "3.1.2")] // (GUID, mod name, mod version)
+    [BepInPlugin("LineOfSight", "Line Of Sight", "3.1.4")] // (GUID, mod name, mod version)
 	public class LineOfSightMod : BaseUnityPlugin
 	{
-		private OptionsMenu optionsMenuInstance;
-		private bool initialized = false;
-
 		public static Type[] blacklist = {
             typeof(PhysicalObject),
 			typeof(WaterDrip),
@@ -65,25 +62,7 @@ namespace LineOfSight
         private void OnModInit(On.RainWorld.orig_OnModsInit orig, RainWorld self)
 		{
 			orig(self);
-
-			// initialize options menu
-			if (this.initialized)
-			{
-				return;
-			}
-			this.initialized = true;
-
-			optionsMenuInstance = new OptionsMenu(this);
-			try
-			{
-				MachineConnector.SetRegisteredOI("LineOfSight", optionsMenuInstance);
-			}
-			catch (Exception ex)
-			{
-				Debug.Log($"Remix Menu Template examples: Hook_OnModsInit options failed init error {optionsMenuInstance}{ex}");
-				Logger.LogError(ex);
-				Logger.LogMessage("WHOOPS");
-			}
+			MachineConnector.SetRegisteredOI("LineOfSight", new LineOfSightRemixMenu(this));
         }
         private void FScreen_ctor(On.FScreen.orig_ctor orig, FScreen self, FutileParams futileParams)
         {
