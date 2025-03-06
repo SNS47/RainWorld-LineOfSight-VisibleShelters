@@ -25,6 +25,9 @@ namespace LineOfSight
             Fancy
         }
 
+        //change this to enable the log
+        public static bool DEBUG_LOG = false; 
+
         //config variables
         public static RenderMode renderMode;
         public static float visibility;
@@ -371,7 +374,9 @@ namespace LineOfSight
 
         public void LateUpdate()
         {
-            if (room.game.IsArenaSession && !room.game.GetArenaGameSession.playersSpawned)
+            if (room.game.IsArenaSession && !room.game.GetArenaGameSession.playersSpawned
+                || room.game.wasAnArtificerDream
+                || room.abstractRoom.name.Equals("SB_L01"))
             {
                 hideAllSprites = true;
                 return;
@@ -616,7 +621,19 @@ namespace LineOfSight
                     foreach (FSprite sprite in sLeaser.sprites)
                         DisableNode(sprite);
 
-            //temporate code to hide shortcut sprites
+            //logs each object type and whether or not it is affected by LOS
+            if (DEBUG_LOG)
+                foreach (RoomCamera.SpriteLeaser sLeaser in rCam.spriteLeasers)
+                    if (!logTypes.Contains(sLeaser.drawableObject.GetType()))
+                    {
+                        logTypes.Add(sLeaser.drawableObject.GetType());
+                        if (generatedTypeBlacklist.Contains(sLeaser.drawableObject.GetType()))
+                            Debug.Log("[Line Of Sight] blacklisted type " + sLeaser.drawableObject.GetType());
+                        else
+                            Debug.Log("[Line Of Sight] whitelisted type " + sLeaser.drawableObject.GetType());
+                    }
+
+            //temporary code to hide shortcut sprites
             shortcutColors.Clear();
             foreach (FSprite sprite in rCam.shortcutGraphics.sprites.Values)
             {
@@ -631,6 +648,7 @@ namespace LineOfSight
                 DisableNode(node);
         }
 
+        private static HashSet<Type> logTypes = new HashSet<Type>();
         private bool ShouldHideDrawable(object drawable)
         {
             if (typeof(LightSource).IsInstanceOfType(drawable) && (drawable as LightSource).tiedToObject != null) // is a light source attached to something
@@ -639,6 +657,11 @@ namespace LineOfSight
                 if (typeof(PhysicalObject).IsInstanceOfType(drawable) && (drawable as PhysicalObject).graphicsModule != null) // the attatched object has a graphics module
                     drawable = (drawable as PhysicalObject).graphicsModule;
             }
+            
+            if (typeof(Lantern).IsInstanceOfType(drawable) && (drawable as Lantern).stick != null) //ignore lanterns that are part of the level
+                return false;
+            if (typeof(DataPearl).IsInstanceOfType(drawable) && DataPearl.PearlIsNotMisc((drawable as DataPearl).AbstractPearl.dataPearlType)) //unique pearls
+                return false;
 
             if (generatedTypeBlacklist.Contains(drawable.GetType())) //if drawable is a type we want to hide
                 return true;
@@ -929,6 +952,7 @@ namespace LineOfSight
         }
     }
 
+    //used for los mesh building
     class Matrix
     {
         float m11, m12, m21, m22;

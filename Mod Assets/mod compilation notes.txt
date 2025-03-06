@@ -1,0 +1,1 @@
+The "losbundle" file contains the shaders needed for the mod. It needs to be placed in the mod folder next to the modinfo.json. If you want to make changes to the shaders you need to repackage them into a new asset bundle using the unity engine. Look online for a tutorial.

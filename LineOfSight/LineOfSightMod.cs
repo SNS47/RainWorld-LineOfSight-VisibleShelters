@@ -23,6 +23,7 @@ namespace LineOfSight
             typeof(ExplosionSpikes),
             typeof(Explosion.ExplosionLight),
             typeof(Explosion.ExplosionSmoke),
+            //typeof(ShockWave),
             typeof(SporeCloud),
 			typeof(SlimeMoldLight),
 			typeof(Bubble),
@@ -30,6 +31,7 @@ namespace LineOfSight
 			typeof(WormGrass.Worm),
             typeof(GraphicsModule),
             typeof(LizardBubble),
+            typeof(LizardJumpModule.JumpLight),
             typeof(Spark),
             typeof(DaddyBubble),
             typeof(DaddyRipple),
@@ -41,7 +43,11 @@ namespace LineOfSight
 
 		public static Type[] whitelist = {
 			typeof(PlayerGraphics),
-			typeof(Smoke.SteamSmoke.SteamParticle)
+			typeof(Smoke.SteamSmoke.SteamParticle),
+            typeof(CoralBrain.StemSegment),
+            typeof(OracleGraphics),
+            typeof(VoidSpawnGraphics),
+            typeof(NSHSwarmer)
 		};
 
         public void OnEnable()
