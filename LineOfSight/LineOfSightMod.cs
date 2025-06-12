@@ -47,7 +47,8 @@ namespace LineOfSight
             typeof(CoralBrain.StemSegment),
             typeof(OracleGraphics),
             typeof(VoidSpawnGraphics),
-            typeof(NSHSwarmer)
+            typeof(NSHSwarmer),
+            typeof(MoreSlugcats.EnergyCell)
 		};
 
         public void OnEnable()

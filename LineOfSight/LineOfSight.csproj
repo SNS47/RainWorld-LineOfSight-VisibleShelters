@@ -8,33 +8,9 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-	  <Reference Include="BepInEx">
-	    <HintPath>..\Dependencies\BepInEx.dll</HintPath>
-	  </Reference>
-	  <Reference Include="HOOKS-Assembly-CSharp">
-	    <HintPath>..\Dependencies\HOOKS-Assembly-CSharp.dll</HintPath>
-	  </Reference>
-	  <Reference Include="MonoMod.RuntimeDetour">
-	    <HintPath>..\Dependencies\MonoMod.RuntimeDetour.dll</HintPath>
-	  </Reference>
-	  <Reference Include="MonoMod.Utils">
-	    <HintPath>..\Dependencies\MonoMod.Utils.dll</HintPath>
-	  </Reference>
-	  <Reference Include="Assembly-CSharp">
-	    <HintPath>..\Dependencies\PUBLIC-Assembly-CSharp.dll</HintPath>
-	  </Reference>
-	  <Reference Include="UnityEngine">
-	    <HintPath>..\Dependencies\UnityEngine.dll</HintPath>
-	  </Reference>
-	  <Reference Include="UnityEngine.AssetBundleModule">
-	    <HintPath>..\Dependencies\UnityEngine.AssetBundleModule.dll</HintPath>
-	  </Reference>
-	  <Reference Include="UnityEngine.CoreModule">
-	    <HintPath>..\Dependencies\UnityEngine.CoreModule.dll</HintPath>
-	  </Reference>
-	  <Reference Include="UnityEngine.InputLegacyModule">
-	    <HintPath>..\Dependencies\UnityEngine.InputLegacyModule.dll</HintPath>
-	  </Reference>
+		<Reference Include="../lib/*.dll">
+		  <Private>false</Private>
+		</Reference>
 	</ItemGroup>
 
 </Project>
