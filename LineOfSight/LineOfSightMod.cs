@@ -13,7 +13,7 @@ using JollyCoop;
 
 namespace LineOfSight
 {
-    [BepInPlugin("LineOfSight", "Line Of Sight", "3.1.4")] // (GUID, mod name, mod version)
+    [BepInPlugin("LineOfSight", "Line Of Sight", "3.1.6")] // (GUID, mod name, mod version)
 	public class LineOfSightMod : BaseUnityPlugin
 	{
 		public static Type[] blacklist = {

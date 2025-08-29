@@ -96,6 +96,8 @@ namespace LineOfSight
                 }
                 foreach (Type type in types)
                 {
+                    if (type == null) continue; // I guess we have null types now
+
                     foreach (Type blacklistedType in blacklistedTypes)
                         if (type.IsSubclassOf(blacklistedType) || type == blacklistedType)
                             generatedTypeBlacklist.Add(type);
