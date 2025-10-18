@@ -25,6 +25,7 @@ namespace LineOfSight
         public readonly Configurable<bool> showRot;
         public readonly Configurable<bool> showWormGrass;
         public readonly Configurable<bool> showMonsterKelp;
+        public readonly Configurable<bool> showShorcutEntrance;
 
         private OpTab renderingTab;
         private OpTab fancyTab;
@@ -49,6 +50,7 @@ namespace LineOfSight
             showRot = this.config.Bind<bool>("LineOfSight_ShowRot", true);
             showWormGrass = this.config.Bind<bool>("LineOfSight_ShowWormGrass", false);
             showMonsterKelp = this.config.Bind<bool>("LineOfSight_ShowMonsterKep", false);
+            showShorcutEntrance = this.config.Bind<bool>("LineOfSight_ShowShortcutEntrance", true);
 
             UpdateConfigs();
             typeof(OptionInterface).GetEvent("OnConfigChanged").GetAddMethod().Invoke(this, new object[] { (OnEventHandler)UpdateConfigs });
@@ -151,7 +153,9 @@ namespace LineOfSight
                 new OpCheckBox(showOverseer, new Vector2(339, 450)) { description = "Default: true - Should Overseers be visible outside of the line of sight?" },
                 new OpLabel(375, 450, "Overseers"),
                 new OpCheckBox(showInsect, new Vector2(339, 400)) { description = "Default: false - Should cosmetic insects be visible outside of the line of sight?" },
-                new OpLabel(375, 400, "Insects")
+                new OpLabel(375, 400, "Insects"),
+                new OpCheckBox(showShorcutEntrance, new Vector2(339, 350)) { description = "Default: true - Should shortcut entrances be visible outside of the line of sight?" },
+                new OpLabel(375, 350, "Shortcut Entrances")
                 );
         }
 
@@ -207,6 +211,7 @@ namespace LineOfSight
             else LOSController.RemoveWhitelistedTypes(typeof(WormGrass.Worm));
             if (showMonsterKelp.Value) LOSController.AddWhitelistedTypes(typeof(TentaclePlantGraphics));
             else LOSController.RemoveWhitelistedTypes(typeof(TentaclePlantGraphics));
+            LOSController.showShortcutEntrance = showShorcutEntrance.Value;
         }
     }
 }

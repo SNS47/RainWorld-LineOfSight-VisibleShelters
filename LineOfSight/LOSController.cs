@@ -44,6 +44,7 @@ namespace LineOfSight
         private static HashSet<Type> blacklistedTypes = new HashSet<Type>();
         private static HashSet<Type> whitelistedTypes = new HashSet<Type>();
         private static HashSet<Type> generatedTypeBlacklist;
+        public static bool showShortcutEntrance;
 
         //shaders
         public static FShader fovShader;
@@ -635,6 +636,7 @@ namespace LineOfSight
                             Debug.Log("[Line Of Sight] whitelisted type " + sLeaser.drawableObject.GetType());
                     }
 
+            
             //temporary code to hide shortcut sprites
             shortcutColors.Clear();
             foreach (FSprite sprite in rCam.shortcutGraphics.sprites.Values)
@@ -642,6 +644,15 @@ namespace LineOfSight
                 shortcutColors.Add(sprite, sprite.color);
                 sprite.color = rCam.shortcutGraphics.ColorFromLightness(0f);
             }
+            
+            //hide shortcut entrances
+            if (!showShortcutEntrance)
+                for (int i = 0; i < rCam.shortcutGraphics.entranceSprites.GetLength(0); i++)
+                    if (rCam.shortcutGraphics.entranceSprites[i, 0] != null)
+                    {
+                        DisableNode(rCam.shortcutGraphics.entranceSprites[i, 0]);
+                        DisableNode(rCam.shortcutGraphics.entranceSprites[i, 1]);
+                    }
 
             //Hide HUD
             foreach (FNode node in rCam.ReturnFContainer("HUD")._childNodes)
