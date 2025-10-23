@@ -650,8 +650,14 @@ namespace LineOfSight
                 for (int i = 0; i < rCam.shortcutGraphics.entranceSprites.GetLength(0); i++)
                     if (rCam.shortcutGraphics.entranceSprites[i, 0] != null)
                     {
-                        DisableNode(rCam.shortcutGraphics.entranceSprites[i, 0]);
-                        DisableNode(rCam.shortcutGraphics.entranceSprites[i, 1]);
+                        bool isShelter =
+                            rCam.shortcutGraphics.entranceSprites[i, 0].element.name == "ShortcutAShelter"
+                            || rCam.shortcutGraphics.entranceSprites[i, 0].element.name == "ShortcutShelter";
+                        if (!isShelter)
+                        {
+                            DisableNode(rCam.shortcutGraphics.entranceSprites[i, 0]);
+                            DisableNode(rCam.shortcutGraphics.entranceSprites[i, 1]);
+                        }
                     }
 
             //Hide HUD
