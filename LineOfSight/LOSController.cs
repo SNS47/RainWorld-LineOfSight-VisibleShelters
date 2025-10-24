@@ -496,26 +496,22 @@ namespace LineOfSight
                     
                     if (isShelter)
                     {
-                        // Create duplicates of both shelter sprites
-                        for (int j = 0; j < 2; j++)
-                        {
-                            FSprite original = rCam.shortcutGraphics.entranceSprites[i, j];
-                            FSprite duplicate = new FSprite(original.element.name);
-                            
-                            // Copy all properties from original
-                            duplicate.SetPosition(original.GetPosition());
-                            duplicate.rotation = original.rotation;
-                            duplicate.scaleX = original.scaleX;
-                            duplicate.scaleY = original.scaleY;
-                            duplicate.color = original.color;
-                            duplicate.alpha = original.alpha;
-                            duplicate.anchorX = original.anchorX;
-                            duplicate.anchorY = original.anchorY;
-                            
-                            // Add to container
-                            container.AddChild(duplicate);
-                            duplicateShelterSprites.Add(duplicate);
-                        }
+                        FSprite original = rCam.shortcutGraphics.entranceSprites[i, 0];
+                        FSprite duplicate = new FSprite(original.element.name);
+                        
+                        // Copy all properties from original
+                        duplicate.SetPosition(original.GetPosition());
+                        duplicate.rotation = original.rotation;
+                        duplicate.scaleX = original.scaleX;
+                        duplicate.scaleY = original.scaleY;
+                        duplicate.color = original.color;
+                        duplicate.alpha = original.alpha;
+                        duplicate.anchorX = original.anchorX;
+                        duplicate.anchorY = original.anchorY;
+                        
+                        // Add to container
+                        container.AddChild(duplicate);
+                        duplicateShelterSprites.Add(duplicate);
                     }
                 }
             }
@@ -662,23 +658,20 @@ namespace LineOfSight
                         
                         if (isShelter && duplicateIndex < duplicateShelterSprites.Count)
                         {
-                            for (int j = 0; j < 2; j++)
-                            {
-                                FSprite original = rCam.shortcutGraphics.entranceSprites[i, j];
-                                FSprite duplicate = duplicateShelterSprites[duplicateIndex];
-                                
-                                // Update position and properties from original
-                                duplicate.SetPosition(original.GetPosition());
-                                duplicate.rotation = original.rotation;
-                                duplicate.color = original.color;
-                                duplicate.alpha = original.alpha;
-                                duplicate.isVisible = true;
-                                
-                                // Make sure it's on top
-                                duplicate.MoveToFront();
-                                
-                                duplicateIndex++;
-                            }
+                            FSprite original = rCam.shortcutGraphics.entranceSprites[i, 0];
+                            FSprite duplicate = duplicateShelterSprites[duplicateIndex];
+                            
+                            // Update position and properties from original
+                            duplicate.SetPosition(original.GetPosition());
+                            duplicate.rotation = original.rotation;
+                            duplicate.color = original.color;
+                            duplicate.alpha = original.alpha;
+                            duplicate.isVisible = true;
+                            
+                            // Make sure it's on top
+                            duplicate.MoveToFront();
+                            
+                            duplicateIndex++;
                         }
                     }
                 }
