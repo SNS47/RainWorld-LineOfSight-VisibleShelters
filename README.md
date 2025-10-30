@@ -1,3 +1,5 @@
+![Visible Shelter Sprite](./Screenshots/visible-shelter-sprite.png "Visible Shelter Sprite")
+
 # Modifications in This Fork
 
 ## Visible Shelter Sprites in Classic Mode
