@@ -26,7 +26,8 @@ namespace LineOfSight
         }
 
         //change this to enable the log
-        public static bool DEBUG_LOG = false; 
+        public static bool DEBUG_LOG = true; 
+        public static BepInEx.Logging.ManualLogSource Logger;
 
         //config variables
         public static RenderMode renderMode;
@@ -114,6 +115,10 @@ namespace LineOfSight
         //Sprites
         public bool hideAllSprites = false;
         public IntVector2 resolution;
+
+        // Shelter Duplicates
+        private FSprite[] shelterDuplicates = new FSprite[8];
+        private FSprite[] shelterADuplicates = new FSprite[8];
 
         //FOV calculation
         private int playerCount;
@@ -221,7 +226,7 @@ namespace LineOfSight
             while (state != MappingState.Done)
                 UpdateMapper(int.MaxValue);
 
-            sLeaser.sprites = new FSprite[playerCount * 4 + 2];
+            sLeaser.sprites = new FSprite[playerCount * 4 + 2 + shelterDuplicates.Length + shelterADuplicates.Length];
 
             FSprite preBlocker = new FSprite("pixel")
             {
@@ -260,7 +265,26 @@ namespace LineOfSight
                     break;
             }
             finalBlocker.SetPosition(0.5f, -0.5f);
-            sLeaser.sprites[sLeaser.sprites.Length - 1] = finalBlocker;
+            sLeaser.sprites[playerCount * 4 + 1] = finalBlocker;
+
+            // Add Shelter Sprite Duplicates
+            int shelterStartIndex = playerCount * 4 + 2;
+            for (int i = 0; i < shelterDuplicates.Length; i++)
+            {
+                FSprite shelter = new FSprite("ShortcutShelter");
+                shelterDuplicates[i] = shelter;
+                shelter.isVisible = false;
+                sLeaser.sprites[shelterStartIndex + i] = shelter;
+            }
+
+            // Add Ancient Shelter Sprite Duplicates
+            for (int i = 0; i < shelterADuplicates.Length; i++)
+            {
+                FSprite shelter = new FSprite("ShortcutAShelter");
+                shelterADuplicates[i] = shelter;
+                shelter.isVisible = false;
+                sLeaser.sprites[shelterStartIndex + shelterDuplicates.Length + i] = shelter;
+            }
 
             AddToContainer(sLeaser, rCam, null);
         }
@@ -355,7 +379,7 @@ namespace LineOfSight
 
         public override void ApplyPalette(RoomCamera.SpriteLeaser sLeaser, RoomCamera rCam, RoomPalette palette)
         {
-            FSprite finalBlocker = sLeaser.sprites[sLeaser.sprites.Length - 1];
+            FSprite finalBlocker = sLeaser.sprites[playerCount * 4 + 1];
             if (renderMode == RenderMode.Fast)
                 finalBlocker.color = new Color(1f - visibility, 0, 0, 1f);
             else
@@ -477,46 +501,54 @@ namespace LineOfSight
         }
 
         private Vector2 _lastCamPos;
-        private List<FSprite> duplicateShelterSprites = new List<FSprite>();
-        private bool shelterSpritesCreated = false;
 
-        private void CreateDuplicateShelterSprites(RoomCamera rCam, RoomCamera.SpriteLeaser sLeaser)
+        private void UpdateShelterDuplicates(RoomCamera rCam)
         {
-            if (shelterSpritesCreated) return;
-            
-            FContainer container = (renderMode == RenderMode.Fast) ? rCam.ReturnFContainer("ForegroundLights") : rCam.ReturnFContainer("Bloom");
+            if (renderMode != RenderMode.Classic)
+                return;
+
+            int duplicateIndex = 0;
+            int duplicateAIndex = 0;
             
             for (int i = 0; i < rCam.shortcutGraphics.entranceSprites.GetLength(0); i++)
             {
-                if (rCam.shortcutGraphics.entranceSprites[i, 0] != null)
+                if (rCam.shortcutGraphics.entranceSprites[i, 0] == null)
+                    continue;
+                
+                FSprite shelterSprite = rCam.shortcutGraphics.entranceSprites[i, 0];
+                
+                // Check if it's a shelter sprite
+                bool isShelter = shelterSprite.element.name == "ShortcutShelter";
+                bool isAShelter = shelterSprite.element.name == "ShortcutAShelter";
+
+                if (!isShelter && !isAShelter)
+                    continue;
+
+                // Update duplicate if we have one
+                FSprite duplicate = null;
+                if (duplicateIndex < shelterDuplicates.Length)
                 {
-                    bool isShelter =
-                        rCam.shortcutGraphics.entranceSprites[i, 0].element.name == "ShortcutAShelter"
-                        || rCam.shortcutGraphics.entranceSprites[i, 0].element.name == "ShortcutShelter";
-                    
-                    if (isShelter)
-                    {
-                        FSprite original = rCam.shortcutGraphics.entranceSprites[i, 0];
-                        FSprite duplicate = new FSprite(original.element.name);
-                        
-                        // Copy all properties from original
-                        duplicate.SetPosition(original.GetPosition());
-                        duplicate.rotation = original.rotation;
-                        duplicate.scaleX = original.scaleX;
-                        duplicate.scaleY = original.scaleY;
-                        duplicate.color = original.color;
-                        duplicate.alpha = original.alpha;
-                        duplicate.anchorX = original.anchorX;
-                        duplicate.anchorY = original.anchorY;
-                        
-                        // Add to container
-                        container.AddChild(duplicate);
-                        duplicateShelterSprites.Add(duplicate);
-                    }
+                    duplicate = shelterDuplicates[duplicateIndex];
+                    duplicateIndex++;
+                }
+                else if (duplicateAIndex < shelterADuplicates.Length)
+                {
+                    duplicate = shelterADuplicates[duplicateAIndex];
+                    duplicateAIndex++;
+                }
+
+                if (duplicate != null)
+                {
+                    duplicate.SetPosition(shelterSprite.GetPosition());
+                    duplicate.rotation = shelterSprite.rotation;
+                    duplicate.color = shelterSprite.color;
+                    duplicate.alpha = shelterSprite.alpha;
+                    duplicate.anchorX = shelterSprite.anchorX;
+                    duplicate.anchorY = shelterSprite.anchorY;
+                    duplicate.isVisible = true;
+                    duplicate.MoveToFront();
                 }
             }
-            
-            shelterSpritesCreated = true;
         }
 
         public override void DrawSprites(RoomCamera.SpriteLeaser sLeaser, RoomCamera rCam, float timeStacker, Vector2 camPos)
@@ -532,13 +564,6 @@ namespace LineOfSight
 
             foreach (FSprite sprite in sLeaser.sprites)
                 sprite.isVisible = false;
-            if (hideAllSprites)
-            {
-                // Hide duplicates too
-                foreach (FSprite sprite in duplicateShelterSprites)
-                    sprite.isVisible = false;
-                return;
-            }
 
             //Fancy out of fov render
             if (renderMode == RenderMode.Fancy)
@@ -625,7 +650,7 @@ namespace LineOfSight
                 screenBlocker.isVisible = true;
             }
 
-            FSprite finalBlocker = sLeaser.sprites[sLeaser.sprites.Length - 1];
+            FSprite finalBlocker = sLeaser.sprites[playerCount * 4 + 1];
             if (renderMode == RenderMode.Fast)
             {
                 finalBlocker.scaleX = rCam.levelGraphic.scaleX;
@@ -640,48 +665,7 @@ namespace LineOfSight
                 foreach (FSprite sprite in sLeaser.sprites)
                     sprite.MoveToFront();
 
-            // CREATE AND UPDATE DUPLICATE SHELTER SPRITES (for Classic mode)
-            if (renderMode == RenderMode.Classic)
-            {
-                if (!shelterSpritesCreated)
-                    CreateDuplicateShelterSprites(rCam, sLeaser);
-                
-                // Update duplicate positions to match originals and make them visible
-                int duplicateIndex = 0;
-                for (int i = 0; i < rCam.shortcutGraphics.entranceSprites.GetLength(0); i++)
-                {
-                    if (rCam.shortcutGraphics.entranceSprites[i, 0] != null)
-                    {
-                        bool isShelter =
-                            rCam.shortcutGraphics.entranceSprites[i, 0].element.name == "ShortcutAShelter"
-                            || rCam.shortcutGraphics.entranceSprites[i, 0].element.name == "ShortcutShelter";
-                        
-                        if (isShelter && duplicateIndex < duplicateShelterSprites.Count)
-                        {
-                            FSprite original = rCam.shortcutGraphics.entranceSprites[i, 0];
-                            FSprite duplicate = duplicateShelterSprites[duplicateIndex];
-                            
-                            // Update position and properties from original
-                            duplicate.SetPosition(original.GetPosition());
-                            duplicate.rotation = original.rotation;
-                            duplicate.color = original.color;
-                            duplicate.alpha = original.alpha;
-                            duplicate.isVisible = true;
-                            
-                            // Make sure it's on top
-                            duplicate.MoveToFront();
-                            
-                            duplicateIndex++;
-                        }
-                    }
-                }
-            }
-            else
-            {
-                // Hide duplicates in other modes
-                foreach (FSprite sprite in duplicateShelterSprites)
-                    sprite.isVisible = false;
-            }
+            UpdateShelterDuplicates(rCam);
 
             if (ditherUsesWorldPos)
                 Shader.SetGlobalVector("_los_camPos", intCamPos.ToVector2());

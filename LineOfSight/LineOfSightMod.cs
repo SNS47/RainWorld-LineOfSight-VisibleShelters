@@ -54,6 +54,9 @@ namespace LineOfSight
         public void OnEnable()
 		{
             On.RainWorld.OnModsInit += OnModInit;
+            LOSController.Logger = this.Logger;
+
+            On.RainWorld.OnModsInit += OnModInit;
 
 			On.FScreen.ctor += FScreen_ctor;
 			On.FScreen.ReinitRenderTexture += FScreen_ReinitRenderTexture;
